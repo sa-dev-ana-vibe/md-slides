@@ -4,7 +4,7 @@ import { PreviewPane } from './PreviewPane'
 
 describe('PreviewPane', () => {
   it('renders placeholder for zero slides', () => {
-    render(<PreviewPane documentHtml="<html></html>" slideCount={0} diagnosticErrors={[]} errorMessage={null} />)
+    render(<PreviewPane documentHtml="<html></html>" slideCount={0} diagnosticErrors={[]} diagnosticsPending={false} errorMessage={null} />)
 
     expect(screen.getByText('0 slides')).toBeInTheDocument()
     expect(screen.getByText('Start typing markdown to generate slides.')).toBeInTheDocument()
@@ -12,7 +12,7 @@ describe('PreviewPane', () => {
   })
 
   it('renders singular label for one slide', () => {
-    render(<PreviewPane documentHtml="<html></html>" slideCount={1} diagnosticErrors={[]} errorMessage={null} />)
+    render(<PreviewPane documentHtml="<html></html>" slideCount={1} diagnosticErrors={[]} diagnosticsPending={false} errorMessage={null} />)
 
     expect(screen.getByText('1 slide')).toBeInTheDocument()
   })
@@ -23,6 +23,7 @@ describe('PreviewPane', () => {
         documentHtml="<html></html>"
         slideCount={2}
         diagnosticErrors={['Failed to load IMG: https://example.com/marp.svg']}
+        diagnosticsPending={false}
         errorMessage={null}
       />
     )
@@ -31,8 +32,22 @@ describe('PreviewPane', () => {
     expect(screen.getByText('Failed to load IMG: https://example.com/marp.svg')).toBeInTheDocument()
   })
 
+  it('shows diagnostics pending notice', () => {
+    render(
+      <PreviewPane
+        documentHtml="<html></html>"
+        slideCount={2}
+        diagnosticErrors={[]}
+        diagnosticsPending={true}
+        errorMessage={null}
+      />
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent('Checking external resources used by slides...')
+  })
+
   it('shows preview error', () => {
-    render(<PreviewPane documentHtml="<html></html>" slideCount={2} diagnosticErrors={[]} errorMessage="Render failed" />)
+    render(<PreviewPane documentHtml="<html></html>" slideCount={2} diagnosticErrors={[]} diagnosticsPending={false} errorMessage="Render failed" />)
 
     expect(screen.getByRole('alert')).toHaveTextContent('Render failed')
     expect(screen.queryByTitle('Slides preview')).not.toBeInTheDocument()

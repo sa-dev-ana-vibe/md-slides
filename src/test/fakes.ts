@@ -26,6 +26,10 @@ export function createFakeServices(overrides: Partial<AppServices> = {}): FakeSe
     export: vi.fn(async () => undefined)
   }
 
+  const diagnosticsInspector = overrides.diagnosticsInspector ?? {
+    inspect: vi.fn(async () => [])
+  }
+
   const importer = overrides.importer ?? {
     pickAndRead: vi.fn(async () => null),
     readDropped: vi.fn(async (file: File) => file.text())
@@ -50,6 +54,7 @@ export function createFakeServices(overrides: Partial<AppServices> = {}): FakeSe
       renderer,
       htmlExporter,
       pdfExporter,
+      diagnosticsInspector,
       importer,
       confirm,
       beforeUnload

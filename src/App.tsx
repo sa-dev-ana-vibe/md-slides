@@ -40,12 +40,15 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
   const [renderResult, setRenderResult] = useState<RenderResult>(EMPTY_RENDER_RESULT)
   const [renderError, setRenderError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [previewDiagnosticErrors, setPreviewDiagnosticErrors] = useState<string[]>([])
+  const [passivePreviewDiagnosticErrors, setPassivePreviewDiagnosticErrors] = useState<string[]>([])
+  const [activePreviewDiagnosticErrors, setActivePreviewDiagnosticErrors] = useState<string[]>([])
+  const [previewDiagnosticsPending, setPreviewDiagnosticsPending] = useState(false)
   const [previewDiagnosticsChannelId, setPreviewDiagnosticsChannelId] = useState(() =>
     createDiagnosticsChannelId('preview')
   )
 
   const markdownRef = useRef(markdown)
+  const diagnosticsRunIdRef = useRef(0)
 
   useEffect(() => {
     markdownRef.current = markdown
@@ -67,7 +70,7 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
         return
       }
 
-      setPreviewDiagnosticErrors((currentErrors) => {
+      setPassivePreviewDiagnosticErrors((currentErrors) => {
         if (currentErrors.includes(diagnosticsMessage.message)) {
           return currentErrors
         }
@@ -83,16 +86,52 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     }
   }, [previewDiagnosticsChannelId])
 
-  const resetPreviewDiagnostics = useCallback(() => {
-    setPreviewDiagnosticErrors([])
+  const clearPreviewDiagnostics = useCallback(() => {
+    diagnosticsRunIdRef.current += 1
+    setPassivePreviewDiagnosticErrors([])
+    setActivePreviewDiagnosticErrors([])
+    setPreviewDiagnosticsPending(false)
     setPreviewDiagnosticsChannelId(createDiagnosticsChannelId('preview'))
   }, [])
+
+  const startPreviewDiagnostics = useCallback(
+    (nextRenderResult: RenderResult) => {
+      const diagnosticsRunId = diagnosticsRunIdRef.current + 1
+      diagnosticsRunIdRef.current = diagnosticsRunId
+
+      setPassivePreviewDiagnosticErrors([])
+      setActivePreviewDiagnosticErrors([])
+      setPreviewDiagnosticsPending(true)
+      setPreviewDiagnosticsChannelId(createDiagnosticsChannelId('preview'))
+
+      void services.diagnosticsInspector
+        .inspect(nextRenderResult)
+        .then((issues) => {
+          if (diagnosticsRunIdRef.current !== diagnosticsRunId) {
+            return
+          }
+
+          const normalizedIssues = Array.from(new Set(issues.map((issue) => issue.trim()).filter((issue) => issue.length > 0)))
+          setActivePreviewDiagnosticErrors(normalizedIssues)
+          setPreviewDiagnosticsPending(false)
+        })
+        .catch((error) => {
+          if (diagnosticsRunIdRef.current !== diagnosticsRunId) {
+            return
+          }
+
+          setActivePreviewDiagnosticErrors([toErrorMessage(error, messages.unknownError)])
+          setPreviewDiagnosticsPending(false)
+        })
+    },
+    [messages.unknownError, services.diagnosticsInspector]
+  )
 
   useEffect(() => {
     if (markdown.trim().length === 0) {
       setRenderResult(EMPTY_RENDER_RESULT)
       setRenderError(null)
-      resetPreviewDiagnostics()
+      clearPreviewDiagnostics()
       return
     }
 
@@ -101,11 +140,11 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
         const result = services.renderer.render(markdown)
         setRenderResult(result)
         setRenderError(null)
-        resetPreviewDiagnostics()
+        startPreviewDiagnostics(result)
       } catch (error) {
         setRenderResult(EMPTY_RENDER_RESULT)
         setRenderError(toErrorMessage(error, messages.unknownError))
-        resetPreviewDiagnostics()
+        clearPreviewDiagnostics()
       }
     }
 
@@ -119,14 +158,21 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     return () => {
       window.clearTimeout(timer)
     }
-  }, [markdown, messages.unknownError, renderDebounceMs, resetPreviewDiagnostics, services.renderer])
+  }, [clearPreviewDiagnostics, markdown, messages.unknownError, renderDebounceMs, services.renderer, startPreviewDiagnostics])
+
+  const previewDiagnosticErrors = useMemo(
+    () => Array.from(new Set([...passivePreviewDiagnosticErrors, ...activePreviewDiagnosticErrors])),
+    [activePreviewDiagnosticErrors, passivePreviewDiagnosticErrors]
+  )
 
   const hasMarkdown = markdown.trim().length > 0
   const canExportHtml = hasMarkdown
-  const canExportPdf = hasMarkdown && previewDiagnosticErrors.length === 0
+  const canExportPdf = hasMarkdown && !previewDiagnosticsPending && previewDiagnosticErrors.length === 0
 
   const pdfDisabledReason = !hasMarkdown
     ? messages.addMarkdownToEnablePdfExport
+    : previewDiagnosticsPending
+      ? messages.checkingPreviewResourcesToEnablePdfExport
     : previewDiagnosticErrors.length > 0
       ? messages.resolvePreviewLoadingErrorsToExportPdf
       : undefined
@@ -245,6 +291,7 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
             documentHtml={previewDocumentHtml}
             slideCount={renderResult.slideCount}
             diagnosticErrors={previewDiagnosticErrors}
+            diagnosticsPending={previewDiagnosticsPending}
             errorMessage={renderError}
           />
         </div>

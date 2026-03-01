@@ -1,4 +1,4 @@
-import type { PdfExporter, SlidesRenderer } from '../../domain/services'
+import type { PdfExporter, SlidesDiagnosticsInspector, SlidesRenderer } from '../../domain/services'
 import { asDiagnosticsMessage, createDiagnosticsChannelId } from './diagnostics'
 import { buildStandaloneHtml } from './buildStandaloneHtml'
 
@@ -36,6 +36,7 @@ interface PrintHostDocument {
 
 interface BrowserPdfExporterDeps {
   renderer: SlidesRenderer
+  diagnosticsInspector?: SlidesDiagnosticsInspector
   createIframe?: () => PrintableIframe
   hostDocument?: PrintHostDocument
   hostWindow?: PrintLifecycleTarget
@@ -53,6 +54,7 @@ export class BrowserPdfExporter implements PdfExporter {
   static readonly DEFAULT_PRINT_CLOSE_TIMEOUT_MS = 300_000
 
   private readonly renderer: SlidesRenderer
+  private readonly diagnosticsInspector: SlidesDiagnosticsInspector
   private readonly createIframe: () => PrintableIframe
   private readonly hostDocument: PrintHostDocument
   private readonly hostWindow: PrintLifecycleTarget
@@ -65,6 +67,7 @@ export class BrowserPdfExporter implements PdfExporter {
 
   constructor({
     renderer,
+    diagnosticsInspector = { inspect: async () => [] },
     createIframe = () => document.createElement('iframe') as unknown as PrintableIframe,
     hostDocument = document as unknown as PrintHostDocument,
     hostWindow = window as unknown as PrintLifecycleTarget,
@@ -76,6 +79,7 @@ export class BrowserPdfExporter implements PdfExporter {
     printCloseTimeoutMs = BrowserPdfExporter.DEFAULT_PRINT_CLOSE_TIMEOUT_MS
   }: BrowserPdfExporterDeps) {
     this.renderer = renderer
+    this.diagnosticsInspector = diagnosticsInspector
     this.createIframe = createIframe
     this.hostDocument = hostDocument
     this.hostWindow = hostWindow
@@ -115,7 +119,7 @@ export class BrowserPdfExporter implements PdfExporter {
     errorPromise: Promise<never>
     cleanup: () => void
   } {
-    let listener: ((event: { data: unknown }) => void) | null = null
+    let listener: (event: { data: unknown }) => void = () => undefined
 
     const errorPromise = new Promise<never>((_, reject) => {
       listener = (event) => {
@@ -136,12 +140,8 @@ export class BrowserPdfExporter implements PdfExporter {
     })
 
     const cleanup = () => {
-      if (!listener) {
-        return
-      }
-
       this.hostMessageTarget.removeEventListener('message', listener)
-      listener = null
+      listener = () => undefined
     }
 
     return { errorPromise, cleanup }
@@ -263,6 +263,12 @@ export class BrowserPdfExporter implements PdfExporter {
 
   async export(markdown: string): Promise<void> {
     const rendered = this.renderer.render(markdown)
+    const diagnosticsIssues = await this.diagnosticsInspector.inspect(rendered)
+
+    if (diagnosticsIssues.length > 0) {
+      throw new Error(diagnosticsIssues[0])
+    }
+
     const diagnosticsChannelId = createDiagnosticsChannelId('pdf-export')
     const standaloneHtml = buildStandaloneHtml(rendered, 'MD Slides PDF Export', {
       diagnosticsChannelId

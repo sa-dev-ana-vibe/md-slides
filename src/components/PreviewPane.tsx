@@ -4,10 +4,11 @@ interface PreviewPaneProps {
   documentHtml: string
   slideCount: number
   diagnosticErrors: string[]
+  diagnosticsPending: boolean
   errorMessage?: string | null
 }
 
-export function PreviewPane({ documentHtml, slideCount, diagnosticErrors, errorMessage }: PreviewPaneProps) {
+export function PreviewPane({ documentHtml, slideCount, diagnosticErrors, diagnosticsPending, errorMessage }: PreviewPaneProps) {
   const { messages } = useI18n()
 
   return (
@@ -22,6 +23,11 @@ export function PreviewPane({ documentHtml, slideCount, diagnosticErrors, errorM
         </div>
       ) : (
         <>
+          {diagnosticsPending && (
+            <div className="border-b border-blue-300 bg-blue-50 px-3 py-2 text-xs text-blue-900" role="status">
+              {messages.previewDiagnosticsInProgress}
+            </div>
+          )}
           {diagnosticErrors.length > 0 && (
             <div className="border-b border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="alert">
               <p className="font-semibold">{messages.previewIssuesDetected}</p>

@@ -12,6 +12,7 @@ export interface AppMessages {
   exportPdf: string
   exportingPdf: string
   addMarkdownToEnablePdfExport: string
+  checkingPreviewResourcesToEnablePdfExport: string
   resolvePreviewLoadingErrorsToExportPdf: string
   replaceMarkdownConfirm: string
   unknownError: string
@@ -23,6 +24,7 @@ export interface AppMessages {
   previewLabel: string
   slideCount: (count: number) => string
   previewIssuesDetected: string
+  previewDiagnosticsInProgress: string
   startTypingMarkdownToGenerateSlides: string
   slidesPreview: string
   markdownLabel: string
@@ -52,6 +54,7 @@ const englishMessages: AppMessages = {
   exportPdf: 'Export PDF',
   exportingPdf: 'Exporting PDF...',
   addMarkdownToEnablePdfExport: 'Add markdown to enable PDF export.',
+  checkingPreviewResourcesToEnablePdfExport: 'Checking external resources before enabling PDF export.',
   resolvePreviewLoadingErrorsToExportPdf: 'Resolve preview loading errors to export PDF.',
   replaceMarkdownConfirm: 'Current markdown will be replaced. Continue?',
   unknownError: 'Unknown error',
@@ -63,6 +66,7 @@ const englishMessages: AppMessages = {
   previewLabel: 'Preview',
   slideCount: (count) => `${count} slide${count === 1 ? '' : 's'}`,
   previewIssuesDetected: 'Preview issues detected. PDF export is disabled until they are resolved.',
+  previewDiagnosticsInProgress: 'Checking external resources used by slides...',
   startTypingMarkdownToGenerateSlides: 'Start typing markdown to generate slides.',
   slidesPreview: 'Slides preview',
   markdownLabel: 'Markdown',
@@ -82,6 +86,7 @@ const russianMessages: AppMessages = {
   exportPdf: 'Экспорт PDF',
   exportingPdf: 'Экспорт PDF...',
   addMarkdownToEnablePdfExport: 'Добавьте markdown, чтобы включить экспорт PDF.',
+  checkingPreviewResourcesToEnablePdfExport: 'Проверяем внешние ресурсы перед включением экспорта PDF.',
   resolvePreviewLoadingErrorsToExportPdf: 'Исправьте ошибки предпросмотра, чтобы экспортировать PDF.',
   replaceMarkdownConfirm: 'Текущий markdown будет заменен. Продолжить?',
   unknownError: 'Неизвестная ошибка',
@@ -98,6 +103,7 @@ const russianMessages: AppMessages = {
     return `${count} ${suffix}`
   },
   previewIssuesDetected: 'Обнаружены проблемы предпросмотра. Экспорт PDF отключен, пока они не будут исправлены.',
+  previewDiagnosticsInProgress: 'Проверяем внешние ресурсы, используемые в слайдах...',
   startTypingMarkdownToGenerateSlides: 'Начните вводить markdown, чтобы создать слайды.',
   slidesPreview: 'Предпросмотр слайдов',
   markdownLabel: 'Markdown',
@@ -117,6 +123,7 @@ const kazakhMessages: AppMessages = {
   exportPdf: 'PDF экспорттау',
   exportingPdf: 'PDF экспортталуда...',
   addMarkdownToEnablePdfExport: 'PDF экспортын қосу үшін markdown енгізіңіз.',
+  checkingPreviewResourcesToEnablePdfExport: 'PDF экспортын қоспас бұрын сыртқы ресурстар тексерілуде.',
   resolvePreviewLoadingErrorsToExportPdf: 'PDF экспорттау үшін алдын ала қарау қателерін түзетіңіз.',
   replaceMarkdownConfirm: 'Ағымдағы markdown ауыстырылады. Жалғастырасыз ба?',
   unknownError: 'Белгісіз қате',
@@ -128,6 +135,7 @@ const kazakhMessages: AppMessages = {
   previewLabel: 'Алдын ала қарау',
   slideCount: (count) => `${count} слайд`,
   previewIssuesDetected: 'Алдын ала қарау мәселелері анықталды. Мәселелер түзетілгенше PDF экспорты өшірілді.',
+  previewDiagnosticsInProgress: 'Слайдтардағы сыртқы ресурстар тексерілуде...',
   startTypingMarkdownToGenerateSlides: 'Слайдтар жасау үшін markdown жаза бастаңыз.',
   slidesPreview: 'Слайдтарды алдын ала қарау',
   markdownLabel: 'Markdown',

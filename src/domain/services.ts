@@ -12,6 +12,10 @@ export interface PdfExporter {
   export(markdown: string): Promise<void>
 }
 
+export interface SlidesDiagnosticsInspector {
+  inspect(renderResult: RenderResult): Promise<string[]>
+}
+
 export interface MarkdownFileImporter {
   pickAndRead(): Promise<string | null>
   readDropped(file: File): Promise<string>
@@ -29,6 +33,7 @@ export interface AppServices {
   renderer: SlidesRenderer
   htmlExporter: HtmlExporter
   pdfExporter: PdfExporter
+  diagnosticsInspector: SlidesDiagnosticsInspector
   importer: MarkdownFileImporter
   confirm: ConfirmService
   beforeUnload: BeforeUnloadGuard

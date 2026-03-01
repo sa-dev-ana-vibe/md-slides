@@ -29,6 +29,18 @@ function getPreviewDiagnosticsChannelId(): string {
   return JSON.parse(match[1]) as string
 }
 
+function createDeferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => undefined
+  let reject: (reason?: unknown) => void = () => undefined
+
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve
+    reject = nextReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('App', () => {
   it('renders base layout and disables exports with empty markdown', () => {
     const { services } = createFakeServices()
@@ -80,6 +92,103 @@ describe('App', () => {
     })
 
     expect(screen.getByText('1 slide')).toBeInTheDocument()
+  })
+
+  it('disables pdf while diagnostics probe is pending', async () => {
+    const diagnosticsDeferred = createDeferred<string[]>()
+    const diagnosticsInspector = {
+      inspect: vi.fn(() => diagnosticsDeferred.promise)
+    }
+
+    const { services } = createFakeServices({ diagnosticsInspector })
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Checking external resources used by slides...')
+    })
+
+    const pdfButton = screen.getByRole('button', { name: 'Export PDF' })
+    expect(pdfButton).toBeDisabled()
+    expect(pdfButton).toHaveAttribute('title', 'Checking external resources before enabling PDF export.')
+    expect(screen.getByRole('button', { name: 'Export HTML' })).toBeEnabled()
+
+    diagnosticsDeferred.resolve([])
+
+    await waitFor(() => {
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
+    })
+  })
+
+  it('shows active diagnostics issues from inspector and keeps pdf disabled', async () => {
+    const diagnosticsInspector = {
+      inspect: vi.fn(async () => ['TypeError: Failed to fetch: https://marp.app/assets/hero-background.svg'])
+    }
+
+    const { services } = createFakeServices({ diagnosticsInspector })
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+
+    await waitFor(() => {
+      expect(screen.getByText('Preview issues detected. PDF export is disabled until they are resolved.')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('TypeError: Failed to fetch: https://marp.app/assets/hero-background.svg')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Export HTML' })).toBeEnabled()
+  })
+
+  it('surfaces diagnostics inspector failures in preview issues', async () => {
+    const diagnosticsInspector = {
+      inspect: vi.fn(async () => {
+        throw new Error('probe crashed')
+      })
+    }
+
+    const { services } = createFakeServices({ diagnosticsInspector })
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+
+    await waitFor(() => {
+      expect(screen.getByText('probe crashed')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
+  })
+
+  it('ignores stale active diagnostics results from older render', async () => {
+    const firstDiagnosticsDeferred = createDeferred<string[]>()
+    const diagnosticsInspector = {
+      inspect: vi
+        .fn<() => Promise<string[]>>()
+        .mockImplementationOnce(() => firstDiagnosticsDeferred.promise)
+        .mockImplementation(async () => [])
+    }
+
+    const { services } = createFakeServices({ diagnosticsInspector })
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# one')
+    await user.type(screen.getByTestId('app-markdown-input'), '\n# two')
+
+    firstDiagnosticsDeferred.resolve(['old issue'])
+
+    await waitFor(() => {
+      expect(screen.queryByText('old issue')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
+    })
   })
 
   it('opens markdown file and replaces editor content', async () => {
@@ -195,7 +304,7 @@ describe('App', () => {
     })
   })
 
-  it('shows preview diagnostics and blocks pdf export while allowing html export', async () => {
+  it('shows passive preview diagnostics and blocks pdf export while allowing html export', async () => {
     const htmlExport = vi.fn()
     const pdfExport = vi.fn(async () => undefined)
 
@@ -261,9 +370,8 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('ignored')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
     })
-
-    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
   })
 
   it('ignores diagnostics from stale preview channels', async () => {
@@ -294,9 +402,8 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('stale error')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
     })
-
-    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
   })
 
   it('runs exports and surfaces action errors', async () => {
@@ -314,6 +421,10 @@ describe('App', () => {
 
     const user = userEvent.setup()
     await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
+    })
 
     await user.click(screen.getByRole('button', { name: 'Export HTML' }))
     expect(htmlExport).toHaveBeenCalledWith('# slide')

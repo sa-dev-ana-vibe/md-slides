@@ -75,6 +75,36 @@ describe('BrowserPdfExporter', () => {
     vi.useRealTimers()
   })
 
+  it('fails fast when diagnostics inspector reports resource issues', async () => {
+    const renderedResult = { html: '<div>slides</div>', css: '', slideCount: 1 }
+    const renderer = {
+      render: vi.fn(() => renderedResult)
+    }
+    const diagnosticsInspector = {
+      inspect: vi.fn(async () => ['GET https://marp.app/assets/marp.svg net::ERR_CONNECTION_CLOSED'])
+    }
+
+    const createIframe = vi.fn(() =>
+      createPrintableIframe({
+        ...createLifecycleTarget(),
+        focus: vi.fn(),
+        print: vi.fn()
+      })
+    )
+
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      diagnosticsInspector,
+      createIframe: createIframe as never
+    })
+
+    await expect(exporter.export('# title')).rejects.toThrow(
+      'GET https://marp.app/assets/marp.svg net::ERR_CONNECTION_CLOSED'
+    )
+    expect(diagnosticsInspector.inspect).toHaveBeenCalledWith(renderedResult)
+    expect(createIframe).not.toHaveBeenCalled()
+  })
+
   it('prints deck through hidden iframe and cleans up listeners', async () => {
     const renderer = {
       render: vi.fn(() => ({ html: '<div>slides</div>', css: '.deck{}', slideCount: 1 }))
@@ -215,6 +245,63 @@ describe('BrowserPdfExporter', () => {
     )
     expect(iframe.remove).toHaveBeenCalledTimes(1)
     expect(messageTarget.listenerCount()).toBe(0)
+  })
+
+  it('ignores unrelated diagnostics messages', async () => {
+    const renderer = {
+      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+    }
+
+    const messageTarget = createMessageTarget()
+    let diagnosticsChannelId = ''
+
+    const frameWindowTarget = createLifecycleTarget()
+    const frameWindow = {
+      ...frameWindowTarget,
+      focus: vi.fn(),
+      print: vi.fn(() => {
+        messageTarget.dispatch({
+          source: 'other-source',
+          channelId: diagnosticsChannelId,
+          type: 'error',
+          message: 'ignore this'
+        })
+        messageTarget.dispatch({
+          source: DIAGNOSTICS_MESSAGE_SOURCE,
+          channelId: `${diagnosticsChannelId}-other`,
+          type: 'error',
+          message: 'ignore this too'
+        })
+        frameWindowTarget.dispatch('beforeprint')
+        frameWindowTarget.dispatch('afterprint')
+      })
+    }
+
+    const iframe = createPrintableIframe(frameWindow)
+    const appendChild = vi.fn((node: typeof iframe) => {
+      const match = node.srcdoc.match(/DIAGNOSTICS_CHANNEL_ID = ([^;]+);/)
+
+      if (!match) {
+        throw new Error('Missing diagnostics channel id in print frame html.')
+      }
+
+      diagnosticsChannelId = JSON.parse(match[1]) as string
+      node.onload?.()
+    })
+
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      createIframe: () => iframe as never,
+      hostDocument: {
+        body: { appendChild: appendChild as never }
+      },
+      hostMessageTarget: messageTarget as never
+    })
+
+    await exporter.export('# title')
+
+    expect(frameWindow.print).toHaveBeenCalledTimes(1)
+    expect(iframe.remove).toHaveBeenCalledTimes(1)
   })
 
   it('throws when iframe host document has no body', async () => {
