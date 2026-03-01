@@ -3,7 +3,12 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const rawBasePath = process.env.VITE_BASE_PATH ?? '/'
+const basePath = rawBasePath.endsWith('/') ? rawBasePath : `${rawBasePath}/`
+const assetsPathPrefix = `${basePath}assets/`
+
 export default defineConfig({
+  base: basePath,
   plugins: [
     react(),
     tailwindcss(),
@@ -17,7 +22,8 @@ export default defineConfig({
         theme_color: '#0f172a',
         background_color: '#f8fafc',
         display: 'standalone',
-        start_url: '/',
+        start_url: basePath,
+        scope: basePath,
         icons: [
           {
             src: 'icon.svg',
@@ -32,7 +38,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,txt,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/assets/'),
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin && url.pathname.startsWith(assetsPathPrefix),
             handler: 'CacheFirst',
             options: {
               cacheName: 'md-slides-runtime-assets',
