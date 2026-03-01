@@ -1,4 +1,5 @@
 import { useRef, useState, type DragEvent, type PropsWithChildren } from 'react'
+import { useI18n } from '../i18n/I18nContext'
 
 export function isMarkdownFile(file: File): boolean {
   const normalizedName = file.name.toLowerCase()
@@ -30,6 +31,7 @@ interface DropZoneProps extends PropsWithChildren {
 }
 
 export function DropZone({ children, onMarkdownFileDrop }: DropZoneProps) {
+  const { messages } = useI18n()
   const [isActive, setIsActive] = useState(false)
   const dragDepthRef = useRef(0)
 
@@ -102,7 +104,7 @@ export function DropZone({ children, onMarkdownFileDrop }: DropZoneProps) {
           isActive ? 'opacity-100' : 'opacity-0'
         ].join(' ')}
       >
-        Drop .md file to replace editor content
+        {messages.dropMarkdownFileToReplaceEditorContent}
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 import type { ExportFormat } from '../domain/types'
+import { useI18n } from '../i18n/I18nContext'
 
 interface ToolbarProps {
   canExportHtml: boolean
@@ -28,17 +29,18 @@ export function Toolbar({
   onExportHtml,
   onExportPdf
 }: ToolbarProps) {
+  const { messages } = useI18n()
   const controlsDisabled = busyAction !== null
   const htmlDisabled = controlsDisabled || !canExportHtml
   const pdfDisabled = controlsDisabled || !canExportPdf
 
   return (
-    <div className="flex flex-wrap items-center gap-2" aria-label="Toolbar">
+    <div className="flex flex-wrap items-center gap-2" aria-label={messages.toolbarLabel}>
       <button type="button" className={buttonClass(controlsDisabled)} onClick={onOpenMarkdown} disabled={controlsDisabled}>
-        {busyAction === 'open' ? 'Opening...' : 'Open .md'}
+        {busyAction === 'open' ? messages.openingMarkdown : messages.openMarkdown}
       </button>
       <button type="button" className={buttonClass(htmlDisabled)} onClick={onExportHtml} disabled={htmlDisabled}>
-        {busyAction === 'html' ? 'Exporting HTML...' : 'Export HTML'}
+        {busyAction === 'html' ? messages.exportingHtml : messages.exportHtml}
       </button>
       <button
         type="button"
@@ -47,7 +49,7 @@ export function Toolbar({
         disabled={pdfDisabled}
         title={pdfDisabled && pdfDisabledReason ? pdfDisabledReason : undefined}
       >
-        {busyAction === 'pdf' ? 'Exporting PDF...' : 'Export PDF'}
+        {busyAction === 'pdf' ? messages.exportingPdf : messages.exportPdf}
       </button>
     </div>
   )

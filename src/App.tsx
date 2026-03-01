@@ -5,9 +5,11 @@ import { MarkdownEditorPane, type MarkdownEditorComponent } from './components/M
 import { PreviewPane } from './components/PreviewPane'
 import { DropZone } from './components/DropZone'
 import { ErrorBanner } from './components/ErrorBanner'
+import { LanguagePicker } from './components/LanguagePicker'
 import type { ExportFormat, RenderResult } from './domain/types'
 import { buildStandaloneHtml } from './infrastructure/export/buildStandaloneHtml'
 import { asDiagnosticsMessage, createDiagnosticsChannelId } from './infrastructure/export/diagnostics'
+import { useI18n } from './i18n/I18nContext'
 
 const EMPTY_RENDER_RESULT: RenderResult = {
   html: '',
@@ -17,12 +19,12 @@ const EMPTY_RENDER_RESULT: RenderResult = {
 
 export const RENDER_DEBOUNCE_MS = 150
 
-function toErrorMessage(error: unknown): string {
+function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) {
     return error.message
   }
 
-  return 'Unknown error'
+  return fallback
 }
 
 interface AppProps {
@@ -32,6 +34,7 @@ interface AppProps {
 
 export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNCE_MS }: AppProps) {
   const services = useAppServices()
+  const { messages } = useI18n()
   const [markdown, setMarkdown] = useState('')
   const [busyAction, setBusyAction] = useState<ExportFormat | 'open' | null>(null)
   const [renderResult, setRenderResult] = useState<RenderResult>(EMPTY_RENDER_RESULT)
@@ -101,7 +104,7 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
         resetPreviewDiagnostics()
       } catch (error) {
         setRenderResult(EMPTY_RENDER_RESULT)
-        setRenderError(toErrorMessage(error))
+        setRenderError(toErrorMessage(error, messages.unknownError))
         resetPreviewDiagnostics()
       }
     }
@@ -116,22 +119,22 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     return () => {
       window.clearTimeout(timer)
     }
-  }, [markdown, renderDebounceMs, resetPreviewDiagnostics, services.renderer])
+  }, [markdown, messages.unknownError, renderDebounceMs, resetPreviewDiagnostics, services.renderer])
 
   const hasMarkdown = markdown.trim().length > 0
   const canExportHtml = hasMarkdown
   const canExportPdf = hasMarkdown && previewDiagnosticErrors.length === 0
 
   const pdfDisabledReason = !hasMarkdown
-    ? 'Add markdown to enable PDF export.'
+    ? messages.addMarkdownToEnablePdfExport
     : previewDiagnosticErrors.length > 0
-      ? 'Resolve preview loading errors to export PDF.'
+      ? messages.resolvePreviewLoadingErrorsToExportPdf
       : undefined
 
   const replaceMarkdownWithConfirmation = useCallback(
     (nextMarkdown: string): boolean => {
       if (markdown.trim().length > 0) {
-        const confirmed = services.confirm.confirm('Current markdown will be replaced. Continue?')
+        const confirmed = services.confirm.confirm(messages.replaceMarkdownConfirm)
 
         if (!confirmed) {
           return false
@@ -141,7 +144,7 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
       setMarkdown(nextMarkdown)
       return true
     },
-    [markdown, services.confirm]
+    [markdown, messages.replaceMarkdownConfirm, services.confirm]
   )
 
   const handleOpenMarkdown = useCallback(async () => {
@@ -157,11 +160,11 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
 
       replaceMarkdownWithConfirmation(nextMarkdown)
     } catch (error) {
-      setActionError(`Failed to open Markdown file: ${toErrorMessage(error)}`)
+      setActionError(messages.failedToOpenMarkdownFile(toErrorMessage(error, messages.unknownError)))
     } finally {
       setBusyAction(null)
     }
-  }, [replaceMarkdownWithConfirmation, services.importer])
+  }, [messages, replaceMarkdownWithConfirmation, services.importer])
 
   const runExport = useCallback(
     async (format: ExportFormat, action: () => Promise<void> | void) => {
@@ -171,12 +174,15 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
       try {
         await action()
       } catch (error) {
-        setActionError(`Failed to export ${format.toUpperCase()}: ${toErrorMessage(error)}`)
+        const errorMessage = toErrorMessage(error, messages.unknownError)
+        const nextActionError =
+          format === 'html' ? messages.failedToExportHtml(errorMessage) : messages.failedToExportPdf(errorMessage)
+        setActionError(nextActionError)
       } finally {
         setBusyAction(null)
       }
     },
-    []
+    [messages]
   )
 
   const handleDropMarkdownFile = useCallback(
@@ -187,26 +193,29 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
         const nextMarkdown = await services.importer.readDropped(file)
         replaceMarkdownWithConfirmation(nextMarkdown)
       } catch (error) {
-        setActionError(`Failed to read dropped file: ${toErrorMessage(error)}`)
+        setActionError(messages.failedToReadDroppedFile(toErrorMessage(error, messages.unknownError)))
       }
     },
-    [replaceMarkdownWithConfirmation, services.importer]
+    [messages, replaceMarkdownWithConfirmation, services.importer]
   )
 
   const previewDocumentHtml = useMemo(
     () =>
-      buildStandaloneHtml(renderResult, 'MD Slides Preview', {
+      buildStandaloneHtml(renderResult, messages.previewDocumentTitle, {
         diagnosticsChannelId: previewDiagnosticsChannelId
       }),
-    [previewDiagnosticsChannelId, renderResult]
+    [messages.previewDocumentTitle, previewDiagnosticsChannelId, renderResult]
   )
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-4 p-4 lg:p-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">MD Slides</h1>
-          <p className="mt-1 text-sm text-slate-600">Create Marp slides from markdown, fully in the browser.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{messages.appTitle}</h1>
+            <p className="mt-1 text-sm text-slate-600">{messages.appSubtitle}</p>
+          </div>
+          <LanguagePicker />
         </div>
 
         <Toolbar

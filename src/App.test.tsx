@@ -40,6 +40,27 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
   })
 
+  it('switches ui language from header language selector', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    const localeSelect = screen.getByLabelText('Language')
+    await user.selectOptions(localeSelect, 'ru')
+
+    expect(screen.getByText('MD Слайды')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Открыть .md' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Экспорт HTML' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Экспорт PDF' })).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Язык'), 'kk')
+    expect(screen.getByText('MD Слайдтар')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '.md ашу' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'HTML экспорттау' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PDF экспорттау' })).toBeInTheDocument()
+  })
+
   it('renders markdown via renderer and updates preview count', async () => {
     const render = vi.fn((markdown: string) => ({
       html: `<div><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject><section>${markdown}</section></foreignObject></svg></div>`,
