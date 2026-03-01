@@ -1,67 +1,294 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserPdfExporter } from './BrowserPdfExporter'
 
+type PrintLifecycleEvent = 'beforeprint' | 'afterprint'
+type LifecycleListener = () => void
+
+function createLifecycleTarget() {
+  const listeners: Record<PrintLifecycleEvent, Set<LifecycleListener>> = {
+    beforeprint: new Set(),
+    afterprint: new Set()
+  }
+
+  const addEventListener = vi.fn((event: PrintLifecycleEvent, listener: LifecycleListener) => {
+    listeners[event].add(listener)
+  })
+
+  const removeEventListener = vi.fn((event: PrintLifecycleEvent, listener: LifecycleListener) => {
+    listeners[event].delete(listener)
+  })
+
+  const dispatch = (event: PrintLifecycleEvent) => {
+    for (const listener of Array.from(listeners[event])) {
+      listener()
+    }
+  }
+
+  const listenerCount = (event: PrintLifecycleEvent): number => listeners[event].size
+
+  return {
+    addEventListener,
+    removeEventListener,
+    dispatch,
+    listenerCount
+  }
+}
+
+function createPrintableIframe(contentWindow: unknown) {
+  return {
+    style: {} as Partial<CSSStyleDeclaration>,
+    srcdoc: '',
+    contentWindow,
+    onload: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    remove: vi.fn()
+  }
+}
+
 describe('BrowserPdfExporter', () => {
-  it('opens print window and prints rendered deck', async () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('prints deck through hidden iframe and cleans up listeners', async () => {
     const renderer = {
       render: vi.fn(() => ({ html: '<div>slides</div>', css: '.deck{}', slideCount: 1 }))
     }
 
-    const openWindow = vi.fn()
-    const documentOpen = vi.fn()
-    const write = vi.fn()
-    const close = vi.fn()
-    const focus = vi.fn()
-    const print = vi.fn()
+    const hostWindow = createLifecycleTarget()
+    const frameWindowTarget = createLifecycleTarget()
+    const frameWindow = {
+      ...frameWindowTarget,
+      focus: vi.fn(),
+      print: vi.fn(() => {
+        frameWindowTarget.dispatch('beforeprint')
+        frameWindowTarget.dispatch('afterprint')
+      })
+    }
 
-    openWindow.mockReturnValue({
-      document: { open: documentOpen, write, close },
-      focus,
-      print
+    const iframe = createPrintableIframe(frameWindow)
+    const appendChild = vi.fn((node: typeof iframe) => {
+      node.onload?.()
     })
 
-    const exporter = new BrowserPdfExporter({ renderer, openWindow })
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      createIframe: () => iframe as never,
+      hostDocument: {
+        body: { appendChild: appendChild as never }
+      },
+      hostWindow: hostWindow as never,
+      frameLoadTimeoutMs: 100,
+      printStartTimeoutMs: 100,
+      printCloseTimeoutMs: 100
+    })
 
     await exporter.export('# title')
 
     expect(renderer.render).toHaveBeenCalledWith('# title')
-    expect(openWindow).toHaveBeenCalledWith('', '_blank', 'noopener,noreferrer')
-    expect(openWindow).toHaveBeenCalledTimes(1)
-    expect(documentOpen).toHaveBeenCalledTimes(1)
-    expect(write).toHaveBeenCalledTimes(1)
-    expect(String(write.mock.calls[0][0])).toContain('<div>slides</div>')
-    expect(close).toHaveBeenCalledTimes(1)
-    expect(focus).toHaveBeenCalledTimes(1)
-    expect(print).toHaveBeenCalledTimes(1)
+    expect(appendChild).toHaveBeenCalledWith(iframe)
+    expect(iframe.srcdoc).toContain('<div>slides</div>')
+    expect(frameWindow.focus).toHaveBeenCalledTimes(1)
+    expect(frameWindow.print).toHaveBeenCalledTimes(1)
+    expect(iframe.remove).toHaveBeenCalledTimes(1)
+    expect(frameWindowTarget.listenerCount('beforeprint')).toBe(0)
+    expect(frameWindowTarget.listenerCount('afterprint')).toBe(0)
+    expect(hostWindow.listenerCount('beforeprint')).toBe(0)
+    expect(hostWindow.listenerCount('afterprint')).toBe(0)
   })
 
-  it('throws when popup could not be opened', async () => {
+  it('throws when iframe host document has no body', async () => {
     const renderer = {
       render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
     }
 
-    const exporter = new BrowserPdfExporter({ renderer, openWindow: () => null })
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      hostDocument: {
+        body: null
+      }
+    })
 
-    await expect(exporter.export('# title')).rejects.toThrow('Unable to open print window. Please allow popups and try again.')
+    await expect(exporter.export('# title')).rejects.toThrow('Unable to render print frame in this document.')
   })
 
-  it('supports default window.open dependency', async () => {
+  it('fails when iframe does not load before timeout', async () => {
+    vi.useFakeTimers()
+
     const renderer = {
       render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
     }
 
-    const popup = {
-      document: { open: vi.fn(), write: vi.fn(), close: vi.fn() },
+    const iframe = createPrintableIframe({
+      ...createLifecycleTarget(),
+      focus: vi.fn(),
+      print: vi.fn()
+    })
+
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      createIframe: () => iframe as never,
+      hostDocument: {
+        body: {
+          appendChild: vi.fn()
+        }
+      },
+      frameLoadTimeoutMs: 20
+    })
+
+    const exportPromise = exporter.export('# title')
+    const rejection = expect(exportPromise).rejects.toThrow('Timed out waiting for print frame to load.')
+    await vi.advanceTimersByTimeAsync(21)
+    await rejection
+    expect(iframe.remove).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails when print dialog does not start', async () => {
+    vi.useFakeTimers()
+
+    const renderer = {
+      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+    }
+
+    const hostWindow = createLifecycleTarget()
+    const frameWindowTarget = createLifecycleTarget()
+    const frameWindow = {
+      ...frameWindowTarget,
       focus: vi.fn(),
       print: vi.fn()
     }
 
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
-    const exporter = new BrowserPdfExporter({ renderer })
+    const iframe = createPrintableIframe(frameWindow)
+    const appendChild = vi.fn((node: typeof iframe) => {
+      node.onload?.()
+    })
 
-    await exporter.export('# test')
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      createIframe: () => iframe as never,
+      hostDocument: {
+        body: {
+          appendChild: appendChild as never
+        }
+      },
+      hostWindow: hostWindow as never,
+      frameLoadTimeoutMs: 20,
+      printStartTimeoutMs: 30,
+      printCloseTimeoutMs: 50
+    })
 
-    expect(openSpy).toHaveBeenCalledWith('', '_blank', 'noopener,noreferrer')
-    openSpy.mockRestore()
+    const exportPromise = exporter.export('# title')
+    const rejection = expect(exportPromise).rejects.toThrow('Print dialog did not start.')
+    await vi.advanceTimersByTimeAsync(31)
+    await rejection
+    expect(iframe.remove).toHaveBeenCalledTimes(1)
+    expect(frameWindowTarget.listenerCount('beforeprint')).toBe(0)
+    expect(frameWindowTarget.listenerCount('afterprint')).toBe(0)
+    expect(hostWindow.listenerCount('beforeprint')).toBe(0)
+    expect(hostWindow.listenerCount('afterprint')).toBe(0)
+  })
+
+  it('fails when print dialog does not close before timeout', async () => {
+    vi.useFakeTimers()
+
+    const renderer = {
+      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+    }
+
+    const frameWindowTarget = createLifecycleTarget()
+    const frameWindow = {
+      ...frameWindowTarget,
+      focus: vi.fn(),
+      print: vi.fn(() => {
+        frameWindowTarget.dispatch('beforeprint')
+      })
+    }
+
+    const iframe = createPrintableIframe(frameWindow)
+    const appendChild = vi.fn((node: typeof iframe) => {
+      node.onload?.()
+    })
+
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      createIframe: () => iframe as never,
+      hostDocument: {
+        body: {
+          appendChild: appendChild as never
+        }
+      },
+      frameLoadTimeoutMs: 20,
+      printStartTimeoutMs: 30,
+      printCloseTimeoutMs: 40
+    })
+
+    const exportPromise = exporter.export('# title')
+    const rejection = expect(exportPromise).rejects.toThrow('Timed out waiting for print dialog to close.')
+    await vi.advanceTimersByTimeAsync(41)
+    await rejection
+    expect(iframe.remove).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails when iframe contentWindow is unavailable', async () => {
+    const renderer = {
+      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+    }
+
+    const iframe = createPrintableIframe(null)
+    const appendChild = vi.fn((node: typeof iframe) => {
+      node.onload?.()
+    })
+
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      createIframe: () => iframe as never,
+      hostDocument: {
+        body: {
+          appendChild: appendChild as never
+        }
+      }
+    })
+
+    await expect(exporter.export('# title')).rejects.toThrow('Unable to access print frame window.')
+    expect(iframe.remove).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails when print throws and still cleans up', async () => {
+    const renderer = {
+      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+    }
+
+    const hostWindow = createLifecycleTarget()
+    const frameWindowTarget = createLifecycleTarget()
+    const frameWindow = {
+      ...frameWindowTarget,
+      focus: vi.fn(),
+      print: vi.fn(() => {
+        throw new Error('print crashed')
+      })
+    }
+
+    const iframe = createPrintableIframe(frameWindow)
+    const appendChild = vi.fn((node: typeof iframe) => {
+      node.onload?.()
+    })
+
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      createIframe: () => iframe as never,
+      hostDocument: {
+        body: {
+          appendChild: appendChild as never
+        }
+      },
+      hostWindow: hostWindow as never
+    })
+
+    await expect(exporter.export('# title')).rejects.toThrow('print crashed')
+    expect(iframe.remove).toHaveBeenCalledTimes(1)
+    expect(frameWindowTarget.listenerCount('beforeprint')).toBe(0)
+    expect(frameWindowTarget.listenerCount('afterprint')).toBe(0)
+    expect(hostWindow.listenerCount('beforeprint')).toBe(0)
+    expect(hostWindow.listenerCount('afterprint')).toBe(0)
   })
 })

@@ -1,47 +1,228 @@
 import type { PdfExporter, SlidesRenderer } from '../../domain/services'
 import { buildStandaloneHtml } from './buildStandaloneHtml'
 
-interface PrintableWindow {
-  document: {
-    open: () => void
-    write: (content: string) => void
-    close: () => void
-  }
+type PrintLifecycleEvent = 'beforeprint' | 'afterprint'
+
+interface PrintLifecycleTarget {
+  addEventListener: (event: PrintLifecycleEvent, listener: () => void) => void
+  removeEventListener: (event: PrintLifecycleEvent, listener: () => void) => void
+}
+
+interface PrintableFrameWindow extends PrintLifecycleTarget {
   focus?: () => void
   print: () => void
 }
 
+interface PrintableIframe {
+  style: Partial<CSSStyleDeclaration>
+  srcdoc: string
+  contentWindow: PrintableFrameWindow | null
+  onload: (() => void) | null
+  onerror: (() => void) | null
+  remove: () => void
+}
+
+interface PrintHostDocument {
+  body: {
+    appendChild: (node: PrintableIframe) => void
+  } | null
+}
+
 interface BrowserPdfExporterDeps {
   renderer: SlidesRenderer
-  openWindow?: (url?: string, target?: string, features?: string) => PrintableWindow | null
+  createIframe?: () => PrintableIframe
+  hostDocument?: PrintHostDocument
+  hostWindow?: PrintLifecycleTarget
+  setTimeoutFn?: (callback: () => void, delayMs: number) => number
+  clearTimeoutFn?: (timeoutId: number) => void
+  frameLoadTimeoutMs?: number
+  printStartTimeoutMs?: number
+  printCloseTimeoutMs?: number
 }
 
 export class BrowserPdfExporter implements PdfExporter {
+  static readonly DEFAULT_FRAME_LOAD_TIMEOUT_MS = 5_000
+  static readonly DEFAULT_PRINT_START_TIMEOUT_MS = 2_000
+  static readonly DEFAULT_PRINT_CLOSE_TIMEOUT_MS = 300_000
+
   private readonly renderer: SlidesRenderer
-  private readonly openWindow: (url?: string, target?: string, features?: string) => PrintableWindow | null
+  private readonly createIframe: () => PrintableIframe
+  private readonly hostDocument: PrintHostDocument
+  private readonly hostWindow: PrintLifecycleTarget
+  private readonly setTimeoutFn: (callback: () => void, delayMs: number) => number
+  private readonly clearTimeoutFn: (timeoutId: number) => void
+  private readonly frameLoadTimeoutMs: number
+  private readonly printStartTimeoutMs: number
+  private readonly printCloseTimeoutMs: number
 
   constructor({
     renderer,
-    openWindow = (url, target, features) => window.open(url, target, features) as PrintableWindow | null
+    createIframe = () => document.createElement('iframe') as unknown as PrintableIframe,
+    hostDocument = document as unknown as PrintHostDocument,
+    hostWindow = window as unknown as PrintLifecycleTarget,
+    setTimeoutFn = window.setTimeout.bind(window),
+    clearTimeoutFn = window.clearTimeout.bind(window),
+    frameLoadTimeoutMs = BrowserPdfExporter.DEFAULT_FRAME_LOAD_TIMEOUT_MS,
+    printStartTimeoutMs = BrowserPdfExporter.DEFAULT_PRINT_START_TIMEOUT_MS,
+    printCloseTimeoutMs = BrowserPdfExporter.DEFAULT_PRINT_CLOSE_TIMEOUT_MS
   }: BrowserPdfExporterDeps) {
     this.renderer = renderer
-    this.openWindow = openWindow
+    this.createIframe = createIframe
+    this.hostDocument = hostDocument
+    this.hostWindow = hostWindow
+    this.setTimeoutFn = setTimeoutFn
+    this.clearTimeoutFn = clearTimeoutFn
+    this.frameLoadTimeoutMs = frameLoadTimeoutMs
+    this.printStartTimeoutMs = printStartTimeoutMs
+    this.printCloseTimeoutMs = printCloseTimeoutMs
+  }
+
+  private waitForIframeLoad(iframe: PrintableIframe): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timeoutId = this.setTimeoutFn(() => {
+        iframe.onload = null
+        iframe.onerror = null
+        reject(new Error('Timed out waiting for print frame to load.'))
+      }, this.frameLoadTimeoutMs)
+
+      iframe.onload = () => {
+        this.clearTimeoutFn(timeoutId)
+        iframe.onload = null
+        iframe.onerror = null
+        resolve()
+      }
+
+      iframe.onerror = () => {
+        this.clearTimeoutFn(timeoutId)
+        iframe.onload = null
+        iframe.onerror = null
+        reject(new Error('Unable to load print frame.'))
+      }
+    })
+  }
+
+  private waitForPrintLifecycle(frameWindow: PrintableFrameWindow): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const eventTargets: PrintLifecycleTarget[] = Array.from(new Set([frameWindow, this.hostWindow]))
+      let settled = false
+      let printStarted = false
+      let closeTimeoutId: number | null = null
+
+      const removeListeners = () => {
+        for (const target of eventTargets) {
+          target.removeEventListener('beforeprint', onBeforePrint)
+          target.removeEventListener('afterprint', onAfterPrint)
+        }
+      }
+
+      const clearCloseTimeout = () => {
+        if (closeTimeoutId !== null) {
+          this.clearTimeoutFn(closeTimeoutId)
+          closeTimeoutId = null
+        }
+      }
+
+      const finalizeResolve = () => {
+        if (settled) {
+          return
+        }
+
+        settled = true
+        this.clearTimeoutFn(startTimeoutId)
+        clearCloseTimeout()
+        removeListeners()
+        resolve()
+      }
+
+      const finalizeReject = (error: unknown) => {
+        if (settled) {
+          return
+        }
+
+        settled = true
+        this.clearTimeoutFn(startTimeoutId)
+        clearCloseTimeout()
+        removeListeners()
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+
+      const onBeforePrint = () => {
+        if (settled || printStarted) {
+          return
+        }
+
+        printStarted = true
+        this.clearTimeoutFn(startTimeoutId)
+        closeTimeoutId = this.setTimeoutFn(() => {
+          finalizeReject(new Error('Timed out waiting for print dialog to close.'))
+        }, this.printCloseTimeoutMs)
+      }
+
+      const onAfterPrint = () => {
+        if (!printStarted) {
+          printStarted = true
+        }
+
+        finalizeResolve()
+      }
+
+      const startTimeoutId = this.setTimeoutFn(() => {
+        finalizeReject(new Error('Print dialog did not start.'))
+      }, this.printStartTimeoutMs)
+
+      for (const target of eventTargets) {
+        target.addEventListener('beforeprint', onBeforePrint)
+        target.addEventListener('afterprint', onAfterPrint)
+      }
+
+      try {
+        frameWindow.focus?.()
+        frameWindow.print()
+      } catch (error) {
+        finalizeReject(error)
+      }
+    })
+  }
+
+  private async printInIframe(standaloneHtml: string): Promise<void> {
+    const body = this.hostDocument.body
+
+    if (!body) {
+      throw new Error('Unable to render print frame in this document.')
+    }
+
+    const iframe = this.createIframe()
+    iframe.style.position = 'fixed'
+    iframe.style.width = '0'
+    iframe.style.height = '0'
+    iframe.style.border = '0'
+    iframe.style.right = '0'
+    iframe.style.bottom = '0'
+
+    try {
+      const loadPromise = this.waitForIframeLoad(iframe)
+      iframe.srcdoc = standaloneHtml
+      body.appendChild(iframe)
+      await loadPromise
+
+      const frameWindow = iframe.contentWindow
+
+      if (!frameWindow) {
+        throw new Error('Unable to access print frame window.')
+      }
+
+      await this.waitForPrintLifecycle(frameWindow)
+    } finally {
+      iframe.onload = null
+      iframe.onerror = null
+      iframe.remove()
+    }
   }
 
   async export(markdown: string): Promise<void> {
     const rendered = this.renderer.render(markdown)
     const standaloneHtml = buildStandaloneHtml(rendered, 'MD Slides PDF Export')
 
-    const printWindow = this.openWindow('', '_blank', 'noopener,noreferrer')
-
-    if (!printWindow) {
-      throw new Error('Unable to open print window. Please allow popups and try again.')
-    }
-
-    printWindow.document.open()
-    printWindow.document.write(standaloneHtml)
-    printWindow.document.close()
-    printWindow.focus?.()
-    printWindow.print()
+    await this.printInIframe(standaloneHtml)
   }
 }
