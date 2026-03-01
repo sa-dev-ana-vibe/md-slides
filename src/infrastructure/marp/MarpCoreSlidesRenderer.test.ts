@@ -1,0 +1,22 @@
+import { describe, expect, it } from 'vitest'
+import { MarpCoreSlidesRenderer } from './MarpCoreSlidesRenderer'
+
+describe('MarpCoreSlidesRenderer', () => {
+  it('renders html, css and slide count', () => {
+    const renderer = new MarpCoreSlidesRenderer()
+
+    const result = renderer.render('# Title\n\n---\n\n# Second')
+
+    expect(result.html).toContain('data-marpit-svg')
+    expect(result.css.length).toBeGreaterThan(100)
+    expect(result.slideCount).toBe(2)
+  })
+
+  it('uses emoji output without twemoji CDN references', () => {
+    const renderer = new MarpCoreSlidesRenderer()
+
+    const result = renderer.render(':dog:')
+
+    expect(result.html).not.toContain('cdn.jsdelivr')
+  })
+})

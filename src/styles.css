@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+}
+
+.wmde-markdown,
+.w-md-editor-text-pre,
+.cm-editor {
+  font-size: 14px;
+}
