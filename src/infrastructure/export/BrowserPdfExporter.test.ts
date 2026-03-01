@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DIAGNOSTICS_MESSAGE_SOURCE } from './diagnostics'
 import { BrowserPdfExporter } from './BrowserPdfExporter'
 
 type PrintLifecycleEvent = 'beforeprint' | 'afterprint'
 type LifecycleListener = () => void
+type MessageListener = (event: { data: unknown }) => void
 
 function createLifecycleTarget() {
   const listeners: Record<PrintLifecycleEvent, Set<LifecycleListener>> = {
@@ -34,6 +36,29 @@ function createLifecycleTarget() {
   }
 }
 
+function createMessageTarget() {
+  const listeners = new Set<MessageListener>()
+
+  return {
+    addEventListener: vi.fn((event: 'message', listener: MessageListener) => {
+      if (event === 'message') {
+        listeners.add(listener)
+      }
+    }),
+    removeEventListener: vi.fn((event: 'message', listener: MessageListener) => {
+      if (event === 'message') {
+        listeners.delete(listener)
+      }
+    }),
+    dispatch: (data: unknown) => {
+      for (const listener of Array.from(listeners)) {
+        listener({ data })
+      }
+    },
+    listenerCount: () => listeners.size
+  }
+}
+
 function createPrintableIframe(contentWindow: unknown) {
   return {
     style: {} as Partial<CSSStyleDeclaration>,
@@ -56,11 +81,13 @@ describe('BrowserPdfExporter', () => {
     }
 
     const hostWindow = createLifecycleTarget()
+    const messageTarget = createMessageTarget()
     const frameWindowTarget = createLifecycleTarget()
     const frameWindow = {
       ...frameWindowTarget,
       focus: vi.fn(),
       print: vi.fn(() => {
+        frameWindowTarget.dispatch('beforeprint')
         frameWindowTarget.dispatch('beforeprint')
         frameWindowTarget.dispatch('afterprint')
       })
@@ -78,6 +105,7 @@ describe('BrowserPdfExporter', () => {
         body: { appendChild: appendChild as never }
       },
       hostWindow: hostWindow as never,
+      hostMessageTarget: messageTarget as never,
       frameLoadTimeoutMs: 100,
       printStartTimeoutMs: 100,
       printCloseTimeoutMs: 100
@@ -95,6 +123,98 @@ describe('BrowserPdfExporter', () => {
     expect(frameWindowTarget.listenerCount('afterprint')).toBe(0)
     expect(hostWindow.listenerCount('beforeprint')).toBe(0)
     expect(hostWindow.listenerCount('afterprint')).toBe(0)
+    expect(messageTarget.listenerCount()).toBe(0)
+  })
+
+  it('handles afterprint-only lifecycle events', async () => {
+    const renderer = {
+      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+    }
+
+    const frameWindowTarget = createLifecycleTarget()
+    const frameWindow = {
+      ...frameWindowTarget,
+      focus: vi.fn(),
+      print: vi.fn(() => {
+        frameWindowTarget.dispatch('afterprint')
+      })
+    }
+
+    const iframe = createPrintableIframe(frameWindow)
+    const appendChild = vi.fn((node: typeof iframe) => {
+      node.onload?.()
+    })
+
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      createIframe: () => iframe as never,
+      hostDocument: {
+        body: {
+          appendChild: appendChild as never
+        }
+      },
+      frameLoadTimeoutMs: 100,
+      printStartTimeoutMs: 100,
+      printCloseTimeoutMs: 100
+    })
+
+    await exporter.export('# title')
+
+    expect(frameWindow.print).toHaveBeenCalledTimes(1)
+    expect(iframe.remove).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails with diagnostics error from print frame', async () => {
+    const renderer = {
+      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+    }
+
+    const messageTarget = createMessageTarget()
+    let diagnosticsChannelId = ''
+
+    const frameWindowTarget = createLifecycleTarget()
+    const frameWindow = {
+      ...frameWindowTarget,
+      focus: vi.fn(),
+      print: vi.fn(() => {
+        messageTarget.dispatch({
+          source: DIAGNOSTICS_MESSAGE_SOURCE,
+          channelId: diagnosticsChannelId,
+          type: 'error',
+          message: 'GET https://marp.app/assets/marp.svg net::ERR_CONNECTION_CLOSED'
+        })
+      })
+    }
+
+    const iframe = createPrintableIframe(frameWindow)
+    const appendChild = vi.fn((node: typeof iframe) => {
+      const match = node.srcdoc.match(/DIAGNOSTICS_CHANNEL_ID = ([^;]+);/)
+
+      if (!match) {
+        throw new Error('Missing diagnostics channel id in print frame html.')
+      }
+
+      diagnosticsChannelId = JSON.parse(match[1]) as string
+      node.onload?.()
+    })
+
+    const exporter = new BrowserPdfExporter({
+      renderer,
+      createIframe: () => iframe as never,
+      hostDocument: {
+        body: { appendChild: appendChild as never }
+      },
+      hostMessageTarget: messageTarget as never,
+      frameLoadTimeoutMs: 100,
+      printStartTimeoutMs: 100,
+      printCloseTimeoutMs: 100
+    })
+
+    await expect(exporter.export('# title')).rejects.toThrow(
+      'GET https://marp.app/assets/marp.svg net::ERR_CONNECTION_CLOSED'
+    )
+    expect(iframe.remove).toHaveBeenCalledTimes(1)
+    expect(messageTarget.listenerCount()).toBe(0)
   })
 
   it('throws when iframe host document has no body', async () => {

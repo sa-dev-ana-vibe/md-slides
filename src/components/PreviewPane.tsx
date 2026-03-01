@@ -1,10 +1,11 @@
 interface PreviewPaneProps {
   documentHtml: string
   slideCount: number
+  diagnosticErrors: string[]
   errorMessage?: string | null
 }
 
-export function PreviewPane({ documentHtml, slideCount, errorMessage }: PreviewPaneProps) {
+export function PreviewPane({ documentHtml, slideCount, diagnosticErrors, errorMessage }: PreviewPaneProps) {
   return (
     <div className="flex h-full min-h-[320px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
@@ -17,6 +18,18 @@ export function PreviewPane({ documentHtml, slideCount, errorMessage }: PreviewP
         </div>
       ) : (
         <>
+          {diagnosticErrors.length > 0 && (
+            <div className="border-b border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="alert">
+              <p className="font-semibold">Preview issues detected. PDF export is disabled until they are resolved.</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4">
+                {diagnosticErrors.map((error) => (
+                  <li key={error} className="break-all">
+                    {error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {slideCount === 0 && (
             <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
               Start typing markdown to generate slides.

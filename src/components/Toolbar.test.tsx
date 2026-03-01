@@ -11,7 +11,8 @@ describe('Toolbar', () => {
 
     render(
       <Toolbar
-        canExport={true}
+        canExportHtml={true}
+        canExportPdf={true}
         busyAction={null}
         onOpenMarkdown={onOpenMarkdown}
         onExportHtml={onExportHtml}
@@ -29,10 +30,12 @@ describe('Toolbar', () => {
     expect(onExportPdf).toHaveBeenCalledTimes(1)
   })
 
-  it('disables export actions when no markdown exists', () => {
+  it('disables html and pdf export independently', () => {
     render(
       <Toolbar
-        canExport={false}
+        canExportHtml={true}
+        canExportPdf={false}
+        pdfDisabledReason="Resolve preview loading errors to export PDF."
         busyAction={null}
         onOpenMarkdown={vi.fn()}
         onExportHtml={vi.fn()}
@@ -40,14 +43,18 @@ describe('Toolbar', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: 'Export HTML' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Export HTML' })).toBeEnabled()
+
+    const pdfButton = screen.getByRole('button', { name: 'Export PDF' })
+    expect(pdfButton).toBeDisabled()
+    expect(pdfButton).toHaveAttribute('title', 'Resolve preview loading errors to export PDF.')
   })
 
   it('shows busy labels and disables controls while action is running', () => {
     render(
       <Toolbar
-        canExport={true}
+        canExportHtml={true}
+        canExportPdf={true}
         busyAction="pdf"
         onOpenMarkdown={vi.fn()}
         onExportHtml={vi.fn()}

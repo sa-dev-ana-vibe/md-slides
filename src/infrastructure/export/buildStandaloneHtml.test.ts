@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DIAGNOSTICS_MESSAGE_SOURCE } from './diagnostics'
 import { buildStandaloneHtml } from './buildStandaloneHtml'
 
 describe('buildStandaloneHtml', () => {
@@ -29,5 +30,21 @@ describe('buildStandaloneHtml', () => {
     )
 
     expect(documentHtml).toContain('&lt;Deck &amp; &quot;Test&quot;&gt;')
+  })
+
+  it('injects diagnostics script when channel id is provided', () => {
+    const documentHtml = buildStandaloneHtml(
+      {
+        html: '<div>slides</div>',
+        css: '',
+        slideCount: 0
+      },
+      'Deck',
+      { diagnosticsChannelId: 'preview-1' }
+    )
+
+    expect(documentHtml).toContain('DIAGNOSTICS_CHANNEL_ID = "preview-1"')
+    expect(documentHtml).toContain(`DIAGNOSTICS_SOURCE = "${DIAGNOSTICS_MESSAGE_SOURCE}"`)
+    expect(documentHtml).toContain("window.parent.postMessage")
   })
 })

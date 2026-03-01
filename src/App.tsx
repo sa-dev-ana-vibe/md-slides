@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppServices } from './app/AppServicesContext'
-import type { ExportFormat, RenderResult } from './domain/types'
-import { buildStandaloneHtml } from './infrastructure/export/buildStandaloneHtml'
 import { Toolbar } from './components/Toolbar'
 import { MarkdownEditorPane, type MarkdownEditorComponent } from './components/MarkdownEditorPane'
 import { PreviewPane } from './components/PreviewPane'
 import { DropZone } from './components/DropZone'
 import { ErrorBanner } from './components/ErrorBanner'
+import type { ExportFormat, RenderResult } from './domain/types'
+import { buildStandaloneHtml } from './infrastructure/export/buildStandaloneHtml'
+import { asDiagnosticsMessage, createDiagnosticsChannelId } from './infrastructure/export/diagnostics'
 
 const EMPTY_RENDER_RESULT: RenderResult = {
   html: '',
@@ -36,6 +37,10 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
   const [renderResult, setRenderResult] = useState<RenderResult>(EMPTY_RENDER_RESULT)
   const [renderError, setRenderError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [previewDiagnosticErrors, setPreviewDiagnosticErrors] = useState<string[]>([])
+  const [previewDiagnosticsChannelId, setPreviewDiagnosticsChannelId] = useState(() =>
+    createDiagnosticsChannelId('preview')
+  )
 
   const markdownRef = useRef(markdown)
 
@@ -48,9 +53,43 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
   }, [services.beforeUnload])
 
   useEffect(() => {
+    const onMessage = (event: MessageEvent<unknown>) => {
+      const diagnosticsMessage = asDiagnosticsMessage(event.data)
+
+      if (!diagnosticsMessage) {
+        return
+      }
+
+      if (diagnosticsMessage.channelId !== previewDiagnosticsChannelId) {
+        return
+      }
+
+      setPreviewDiagnosticErrors((currentErrors) => {
+        if (currentErrors.includes(diagnosticsMessage.message)) {
+          return currentErrors
+        }
+
+        return [...currentErrors, diagnosticsMessage.message]
+      })
+    }
+
+    window.addEventListener('message', onMessage)
+
+    return () => {
+      window.removeEventListener('message', onMessage)
+    }
+  }, [previewDiagnosticsChannelId])
+
+  const resetPreviewDiagnostics = useCallback(() => {
+    setPreviewDiagnosticErrors([])
+    setPreviewDiagnosticsChannelId(createDiagnosticsChannelId('preview'))
+  }, [])
+
+  useEffect(() => {
     if (markdown.trim().length === 0) {
       setRenderResult(EMPTY_RENDER_RESULT)
       setRenderError(null)
+      resetPreviewDiagnostics()
       return
     }
 
@@ -59,9 +98,11 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
         const result = services.renderer.render(markdown)
         setRenderResult(result)
         setRenderError(null)
+        resetPreviewDiagnostics()
       } catch (error) {
         setRenderResult(EMPTY_RENDER_RESULT)
         setRenderError(toErrorMessage(error))
+        resetPreviewDiagnostics()
       }
     }
 
@@ -75,9 +116,17 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     return () => {
       window.clearTimeout(timer)
     }
-  }, [markdown, renderDebounceMs, services.renderer])
+  }, [markdown, renderDebounceMs, resetPreviewDiagnostics, services.renderer])
 
-  const canExport = markdown.trim().length > 0
+  const hasMarkdown = markdown.trim().length > 0
+  const canExportHtml = hasMarkdown
+  const canExportPdf = hasMarkdown && previewDiagnosticErrors.length === 0
+
+  const pdfDisabledReason = !hasMarkdown
+    ? 'Add markdown to enable PDF export.'
+    : previewDiagnosticErrors.length > 0
+      ? 'Resolve preview loading errors to export PDF.'
+      : undefined
 
   const replaceMarkdownWithConfirmation = useCallback(
     (nextMarkdown: string): boolean => {
@@ -144,7 +193,13 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     [replaceMarkdownWithConfirmation, services.importer]
   )
 
-  const previewDocumentHtml = useMemo(() => buildStandaloneHtml(renderResult, 'MD Slides Preview'), [renderResult])
+  const previewDocumentHtml = useMemo(
+    () =>
+      buildStandaloneHtml(renderResult, 'MD Slides Preview', {
+        diagnosticsChannelId: previewDiagnosticsChannelId
+      }),
+    [previewDiagnosticsChannelId, renderResult]
+  )
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -155,8 +210,10 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
         </div>
 
         <Toolbar
-          canExport={canExport}
+          canExportHtml={canExportHtml}
+          canExportPdf={canExportPdf}
           busyAction={busyAction}
+          pdfDisabledReason={pdfDisabledReason}
           onOpenMarkdown={() => {
             void handleOpenMarkdown()
           }}
@@ -175,7 +232,12 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
             <MarkdownEditorPane value={markdown} onChange={setMarkdown} EditorComponent={editorComponent} />
           </DropZone>
 
-          <PreviewPane documentHtml={previewDocumentHtml} slideCount={renderResult.slideCount} errorMessage={renderError} />
+          <PreviewPane
+            documentHtml={previewDocumentHtml}
+            slideCount={renderResult.slideCount}
+            diagnosticErrors={previewDiagnosticErrors}
+            errorMessage={renderError}
+          />
         </div>
       </main>
     </div>

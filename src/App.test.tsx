@@ -3,8 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { MarkdownEditorAdapterProps } from './components/MarkdownEditorPane'
-import { renderWithServices } from './test/renderWithServices'
+import { DIAGNOSTICS_MESSAGE_SOURCE } from './infrastructure/export/diagnostics'
 import { createFakeServices } from './test/fakes'
+import { renderWithServices } from './test/renderWithServices'
 
 function TestEditor({ value, onChange }: MarkdownEditorAdapterProps) {
   return (
@@ -15,6 +16,17 @@ function TestEditor({ value, onChange }: MarkdownEditorAdapterProps) {
       onChange={(event) => onChange(event.target.value)}
     />
   )
+}
+
+function getPreviewDiagnosticsChannelId(): string {
+  const previewFrame = screen.getByTitle('Slides preview') as HTMLIFrameElement
+  const match = previewFrame.srcdoc.match(/DIAGNOSTICS_CHANNEL_ID = ([^;]+);/)
+
+  if (!match) {
+    throw new Error('Unable to find diagnostics channel id in preview frame HTML.')
+  }
+
+  return JSON.parse(match[1]) as string
 }
 
 describe('App', () => {
@@ -160,6 +172,110 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Failed to read dropped file: Unknown error')
     })
+  })
+
+  it('shows preview diagnostics and blocks pdf export while allowing html export', async () => {
+    const htmlExport = vi.fn()
+    const pdfExport = vi.fn(async () => undefined)
+
+    const { services } = createFakeServices({
+      htmlExporter: { export: htmlExport },
+      pdfExporter: { export: pdfExport }
+    })
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+
+    const previewChannelId = getPreviewDiagnosticsChannelId()
+
+    const diagnosticsMessage = 'GET https://marp.app/assets/marp.svg net::ERR_CONNECTION_CLOSED'
+    const diagnosticsEvent = new MessageEvent('message', {
+      data: {
+        source: DIAGNOSTICS_MESSAGE_SOURCE,
+        channelId: previewChannelId,
+        type: 'error',
+        message: diagnosticsMessage
+      }
+    })
+
+    window.dispatchEvent(diagnosticsEvent)
+    window.dispatchEvent(diagnosticsEvent)
+
+    await waitFor(() => {
+      expect(screen.getByText('Preview issues detected. PDF export is disabled until they are resolved.')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText(diagnosticsMessage)).toBeInTheDocument()
+    expect(screen.getAllByText(diagnosticsMessage)).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Export HTML' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Export HTML' }))
+    expect(htmlExport).toHaveBeenCalledWith('# slide')
+    expect(pdfExport).not.toHaveBeenCalled()
+  })
+
+  it('ignores invalid diagnostics message payloads', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+
+    const previewChannelId = getPreviewDiagnosticsChannelId()
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: 'another-source',
+          channelId: previewChannelId,
+          type: 'error',
+          message: 'ignored'
+        }
+      })
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText('ignored')).not.toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
+  })
+
+  it('ignores diagnostics from stale preview channels', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# one')
+
+    const oldChannelId = getPreviewDiagnosticsChannelId()
+
+    await user.type(screen.getByTestId('app-markdown-input'), '\n# two')
+
+    const currentChannelId = getPreviewDiagnosticsChannelId()
+    expect(currentChannelId).not.toBe(oldChannelId)
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: DIAGNOSTICS_MESSAGE_SOURCE,
+          channelId: oldChannelId,
+          type: 'error',
+          message: 'stale error'
+        }
+      })
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText('stale error')).not.toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
   })
 
   it('runs exports and surfaces action errors', async () => {

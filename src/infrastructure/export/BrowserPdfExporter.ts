@@ -1,4 +1,5 @@
 import type { PdfExporter, SlidesRenderer } from '../../domain/services'
+import { asDiagnosticsMessage, createDiagnosticsChannelId } from './diagnostics'
 import { buildStandaloneHtml } from './buildStandaloneHtml'
 
 type PrintLifecycleEvent = 'beforeprint' | 'afterprint'
@@ -6,6 +7,11 @@ type PrintLifecycleEvent = 'beforeprint' | 'afterprint'
 interface PrintLifecycleTarget {
   addEventListener: (event: PrintLifecycleEvent, listener: () => void) => void
   removeEventListener: (event: PrintLifecycleEvent, listener: () => void) => void
+}
+
+interface MessageEventTarget {
+  addEventListener: (event: 'message', listener: (event: { data: unknown }) => void) => void
+  removeEventListener: (event: 'message', listener: (event: { data: unknown }) => void) => void
 }
 
 interface PrintableFrameWindow extends PrintLifecycleTarget {
@@ -33,6 +39,7 @@ interface BrowserPdfExporterDeps {
   createIframe?: () => PrintableIframe
   hostDocument?: PrintHostDocument
   hostWindow?: PrintLifecycleTarget
+  hostMessageTarget?: MessageEventTarget
   setTimeoutFn?: (callback: () => void, delayMs: number) => number
   clearTimeoutFn?: (timeoutId: number) => void
   frameLoadTimeoutMs?: number
@@ -49,6 +56,7 @@ export class BrowserPdfExporter implements PdfExporter {
   private readonly createIframe: () => PrintableIframe
   private readonly hostDocument: PrintHostDocument
   private readonly hostWindow: PrintLifecycleTarget
+  private readonly hostMessageTarget: MessageEventTarget
   private readonly setTimeoutFn: (callback: () => void, delayMs: number) => number
   private readonly clearTimeoutFn: (timeoutId: number) => void
   private readonly frameLoadTimeoutMs: number
@@ -60,6 +68,7 @@ export class BrowserPdfExporter implements PdfExporter {
     createIframe = () => document.createElement('iframe') as unknown as PrintableIframe,
     hostDocument = document as unknown as PrintHostDocument,
     hostWindow = window as unknown as PrintLifecycleTarget,
+    hostMessageTarget = window as unknown as MessageEventTarget,
     setTimeoutFn = window.setTimeout.bind(window),
     clearTimeoutFn = window.clearTimeout.bind(window),
     frameLoadTimeoutMs = BrowserPdfExporter.DEFAULT_FRAME_LOAD_TIMEOUT_MS,
@@ -70,6 +79,7 @@ export class BrowserPdfExporter implements PdfExporter {
     this.createIframe = createIframe
     this.hostDocument = hostDocument
     this.hostWindow = hostWindow
+    this.hostMessageTarget = hostMessageTarget
     this.setTimeoutFn = setTimeoutFn
     this.clearTimeoutFn = clearTimeoutFn
     this.frameLoadTimeoutMs = frameLoadTimeoutMs
@@ -101,6 +111,42 @@ export class BrowserPdfExporter implements PdfExporter {
     })
   }
 
+  private createDiagnosticsErrorPromise(diagnosticsChannelId: string): {
+    errorPromise: Promise<never>
+    cleanup: () => void
+  } {
+    let listener: ((event: { data: unknown }) => void) | null = null
+
+    const errorPromise = new Promise<never>((_, reject) => {
+      listener = (event) => {
+        const diagnosticsMessage = asDiagnosticsMessage(event.data)
+
+        if (!diagnosticsMessage) {
+          return
+        }
+
+        if (diagnosticsMessage.channelId !== diagnosticsChannelId) {
+          return
+        }
+
+        reject(new Error(diagnosticsMessage.message))
+      }
+
+      this.hostMessageTarget.addEventListener('message', listener)
+    })
+
+    const cleanup = () => {
+      if (!listener) {
+        return
+      }
+
+      this.hostMessageTarget.removeEventListener('message', listener)
+      listener = null
+    }
+
+    return { errorPromise, cleanup }
+  }
+
   private waitForPrintLifecycle(frameWindow: PrintableFrameWindow): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const eventTargets: PrintLifecycleTarget[] = Array.from(new Set([frameWindow, this.hostWindow]))
@@ -123,10 +169,6 @@ export class BrowserPdfExporter implements PdfExporter {
       }
 
       const finalizeResolve = () => {
-        if (settled) {
-          return
-        }
-
         settled = true
         this.clearTimeoutFn(startTimeoutId)
         clearCloseTimeout()
@@ -135,10 +177,6 @@ export class BrowserPdfExporter implements PdfExporter {
       }
 
       const finalizeReject = (error: unknown) => {
-        if (settled) {
-          return
-        }
-
         settled = true
         this.clearTimeoutFn(startTimeoutId)
         clearCloseTimeout()
@@ -184,7 +222,7 @@ export class BrowserPdfExporter implements PdfExporter {
     })
   }
 
-  private async printInIframe(standaloneHtml: string): Promise<void> {
+  private async printInIframe(standaloneHtml: string, diagnosticsChannelId: string): Promise<void> {
     const body = this.hostDocument.body
 
     if (!body) {
@@ -199,11 +237,14 @@ export class BrowserPdfExporter implements PdfExporter {
     iframe.style.right = '0'
     iframe.style.bottom = '0'
 
+    const diagnostics = this.createDiagnosticsErrorPromise(diagnosticsChannelId)
+
     try {
       const loadPromise = this.waitForIframeLoad(iframe)
       iframe.srcdoc = standaloneHtml
       body.appendChild(iframe)
-      await loadPromise
+
+      await Promise.race([loadPromise, diagnostics.errorPromise])
 
       const frameWindow = iframe.contentWindow
 
@@ -211,8 +252,9 @@ export class BrowserPdfExporter implements PdfExporter {
         throw new Error('Unable to access print frame window.')
       }
 
-      await this.waitForPrintLifecycle(frameWindow)
+      await Promise.race([this.waitForPrintLifecycle(frameWindow), diagnostics.errorPromise])
     } finally {
+      diagnostics.cleanup()
       iframe.onload = null
       iframe.onerror = null
       iframe.remove()
@@ -221,8 +263,11 @@ export class BrowserPdfExporter implements PdfExporter {
 
   async export(markdown: string): Promise<void> {
     const rendered = this.renderer.render(markdown)
-    const standaloneHtml = buildStandaloneHtml(rendered, 'MD Slides PDF Export')
+    const diagnosticsChannelId = createDiagnosticsChannelId('pdf-export')
+    const standaloneHtml = buildStandaloneHtml(rendered, 'MD Slides PDF Export', {
+      diagnosticsChannelId
+    })
 
-    await this.printInIframe(standaloneHtml)
+    await this.printInIframe(standaloneHtml, diagnosticsChannelId)
   }
 }
