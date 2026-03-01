@@ -166,9 +166,6 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
           onExportPdf={() => {
             void runExport('pdf', () => services.pdfExporter.export(markdown))
           }}
-          onExportPptx={() => {
-            void runExport('pptx', () => services.pptxExporter.export(markdown))
-          }}
         />
 
         {actionError && <ErrorBanner message={actionError} />}

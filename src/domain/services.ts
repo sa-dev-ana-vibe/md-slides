@@ -12,10 +12,6 @@ export interface PdfExporter {
   export(markdown: string): Promise<void>
 }
 
-export interface PptxExporter {
-  export(markdown: string, fileName?: string): Promise<void>
-}
-
 export interface MarkdownFileImporter {
   pickAndRead(): Promise<string | null>
   readDropped(file: File): Promise<string>
@@ -33,7 +29,6 @@ export interface AppServices {
   renderer: SlidesRenderer
   htmlExporter: HtmlExporter
   pdfExporter: PdfExporter
-  pptxExporter: PptxExporter
   importer: MarkdownFileImporter
   confirm: ConfirmService
   beforeUnload: BeforeUnloadGuard

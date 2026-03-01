@@ -1,4 +1,4 @@
-export type ExportFormat = 'html' | 'pdf' | 'pptx'
+export type ExportFormat = 'html' | 'pdf'
 
 export interface RenderResult {
   html: string

@@ -26,7 +26,6 @@ describe('App', () => {
     expect(screen.getByText('MD Slides')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Export HTML' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Export PPTX' })).toBeDisabled()
   })
 
   it('renders markdown via renderer and updates preview count', async () => {
@@ -165,15 +164,13 @@ describe('App', () => {
 
   it('runs exports and surfaces action errors', async () => {
     const htmlExport = vi.fn()
-    const pdfExport = vi.fn(async () => undefined)
-    const pptxExport = vi.fn(async () => {
-      throw new Error('pptx failed')
+    const pdfExport = vi.fn(async () => {
+      throw new Error('pdf failed')
     })
 
     const { services } = createFakeServices({
       htmlExporter: { export: htmlExport },
-      pdfExporter: { export: pdfExport },
-      pptxExporter: { export: pptxExport }
+      pdfExporter: { export: pdfExport }
     })
 
     renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
@@ -189,10 +186,8 @@ describe('App', () => {
       expect(pdfExport).toHaveBeenCalledWith('# slide')
     })
 
-    await user.click(screen.getByRole('button', { name: 'Export PPTX' }))
-
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Failed to export PPTX: pptx failed')
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to export PDF: pdf failed')
     })
   })
 

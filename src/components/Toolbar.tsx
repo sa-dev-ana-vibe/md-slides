@@ -6,7 +6,6 @@ interface ToolbarProps {
   onOpenMarkdown: () => void
   onExportHtml: () => void
   onExportPdf: () => void
-  onExportPptx: () => void
 }
 
 function buttonClass(disabled: boolean): string {
@@ -18,7 +17,7 @@ function buttonClass(disabled: boolean): string {
   ].join(' ')
 }
 
-export function Toolbar({ canExport, busyAction, onOpenMarkdown, onExportHtml, onExportPdf, onExportPptx }: ToolbarProps) {
+export function Toolbar({ canExport, busyAction, onOpenMarkdown, onExportHtml, onExportPdf }: ToolbarProps) {
   const controlsDisabled = busyAction !== null
   const exportDisabled = controlsDisabled || !canExport
 
@@ -32,9 +31,6 @@ export function Toolbar({ canExport, busyAction, onOpenMarkdown, onExportHtml, o
       </button>
       <button type="button" className={buttonClass(exportDisabled)} onClick={onExportPdf} disabled={exportDisabled}>
         {busyAction === 'pdf' ? 'Exporting PDF...' : 'Export PDF'}
-      </button>
-      <button type="button" className={buttonClass(exportDisabled)} onClick={onExportPptx} disabled={exportDisabled}>
-        {busyAction === 'pptx' ? 'Exporting PPTX...' : 'Export PPTX'}
       </button>
     </div>
   )

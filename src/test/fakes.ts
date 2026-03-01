@@ -26,10 +26,6 @@ export function createFakeServices(overrides: Partial<AppServices> = {}): FakeSe
     export: vi.fn(async () => undefined)
   }
 
-  const pptxExporter = overrides.pptxExporter ?? {
-    export: vi.fn(async () => undefined)
-  }
-
   const importer = overrides.importer ?? {
     pickAndRead: vi.fn(async () => null),
     readDropped: vi.fn(async (file: File) => file.text())
@@ -54,7 +50,6 @@ export function createFakeServices(overrides: Partial<AppServices> = {}): FakeSe
       renderer,
       htmlExporter,
       pdfExporter,
-      pptxExporter,
       importer,
       confirm,
       beforeUnload

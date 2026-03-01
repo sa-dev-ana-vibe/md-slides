@@ -17,7 +17,6 @@
     "@codemirror/lang-markdown": "^6.5.0",
     "@marp-team/marp-core": "^4.3.0",
     "@uiw/react-codemirror": "^4.25.5",
-    "pptxgenjs": "^4.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "workbox-window": "^7.4.0"

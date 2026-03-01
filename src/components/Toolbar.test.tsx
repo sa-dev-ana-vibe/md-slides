@@ -8,7 +8,6 @@ describe('Toolbar', () => {
     const onOpenMarkdown = vi.fn()
     const onExportHtml = vi.fn()
     const onExportPdf = vi.fn()
-    const onExportPptx = vi.fn()
 
     render(
       <Toolbar
@@ -17,7 +16,6 @@ describe('Toolbar', () => {
         onOpenMarkdown={onOpenMarkdown}
         onExportHtml={onExportHtml}
         onExportPdf={onExportPdf}
-        onExportPptx={onExportPptx}
       />
     )
 
@@ -25,12 +23,10 @@ describe('Toolbar', () => {
     await user.click(screen.getByRole('button', { name: 'Open .md' }))
     await user.click(screen.getByRole('button', { name: 'Export HTML' }))
     await user.click(screen.getByRole('button', { name: 'Export PDF' }))
-    await user.click(screen.getByRole('button', { name: 'Export PPTX' }))
 
     expect(onOpenMarkdown).toHaveBeenCalledTimes(1)
     expect(onExportHtml).toHaveBeenCalledTimes(1)
     expect(onExportPdf).toHaveBeenCalledTimes(1)
-    expect(onExportPptx).toHaveBeenCalledTimes(1)
   })
 
   it('disables export actions when no markdown exists', () => {
@@ -41,13 +37,11 @@ describe('Toolbar', () => {
         onOpenMarkdown={vi.fn()}
         onExportHtml={vi.fn()}
         onExportPdf={vi.fn()}
-        onExportPptx={vi.fn()}
       />
     )
 
     expect(screen.getByRole('button', { name: 'Export HTML' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Export PPTX' })).toBeDisabled()
   })
 
   it('shows busy labels and disables controls while action is running', () => {
@@ -58,7 +52,6 @@ describe('Toolbar', () => {
         onOpenMarkdown={vi.fn()}
         onExportHtml={vi.fn()}
         onExportPdf={vi.fn()}
-        onExportPptx={vi.fn()}
       />
     )
 
