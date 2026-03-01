@@ -87,4 +87,36 @@ describe('DropZone', () => {
 
     expect(screen.getByText('Drop .md file to replace editor content')).toHaveClass('opacity-0')
   })
+
+  it('handles drag over and nested drag depth correctly', () => {
+    const onMarkdownFileDrop = vi.fn()
+    const markdownFile = new File(['# slide'], 'deck.md', { type: 'text/plain' })
+    const plainFile = new File(['plain'], 'deck.txt', { type: 'text/plain' })
+
+    render(
+      <DropZone onMarkdownFileDrop={onMarkdownFileDrop}>
+        <div>Editor</div>
+      </DropZone>
+    )
+
+    const zone = screen.getByTestId('markdown-drop-zone')
+    const overlay = screen.getByText('Drop .md file to replace editor content')
+
+    fireEvent.dragOver(zone, { dataTransfer: createDataTransfer([plainFile]) })
+    expect(overlay).toHaveClass('opacity-0')
+
+    fireEvent.dragEnter(zone, { dataTransfer: createDataTransfer([markdownFile]) })
+    fireEvent.dragEnter(zone, { dataTransfer: createDataTransfer([markdownFile]) })
+    fireEvent.dragOver(zone, { dataTransfer: createDataTransfer([markdownFile]) })
+    expect(overlay).toHaveClass('opacity-100')
+
+    fireEvent.dragLeave(zone, { dataTransfer: createDataTransfer([markdownFile]) })
+    expect(overlay).toHaveClass('opacity-100')
+
+    fireEvent.dragLeave(zone, { dataTransfer: createDataTransfer([plainFile]) })
+    expect(overlay).toHaveClass('opacity-100')
+
+    fireEvent.dragLeave(zone, { dataTransfer: createDataTransfer([markdownFile]) })
+    expect(overlay).toHaveClass('opacity-0')
+  })
 })

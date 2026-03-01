@@ -48,6 +48,47 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
     )
   })
 
+  it('uses default fetch and probes only eligible resource attributes', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+
+    try {
+      const inspector = new BrowserSlidesDiagnosticsInspector({
+        baseUrl: 'https://slides.local/editor'
+      })
+
+      const issues = await inspector.inspect({
+        html: `
+          <link rel="stylesheet preload" href="/styles/app.css" />
+          <link rel="icon" href="/favicon.ico" />
+          <link rel="stylesheet" href="#local-style" />
+          <input type="image" src="/images/input-image.png" />
+          <input type="text" src="/images/input-text.png" />
+          <picture>
+            <source src="/video.mp4" srcset="/img/one.png 1x, /img/two.png 2x" />
+          </picture>
+          <style></style>
+        `,
+        css: '',
+        slideCount: 1
+      })
+
+      expect(issues).toEqual([])
+      const calledUrls = fetchSpy.mock.calls.map((call) => call[0]).sort()
+
+      expect(calledUrls).toEqual(
+        [
+          'https://slides.local/img/one.png',
+          'https://slides.local/img/two.png',
+          'https://slides.local/images/input-image.png',
+          'https://slides.local/styles/app.css',
+          'https://slides.local/video.mp4'
+        ].sort()
+      )
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it('does not probe plain anchor links or fragment links', async () => {
     const fetchFn = vi.fn(async () => new Response(null, { status: 200 }))
 
@@ -135,11 +176,11 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
 
     const issues = await inspector.inspect({
       html: `
-        <img src=\"''\" />
-        <img src=\"http://[::1\" />
-        <img src=\" /images/ok.svg \" />
+        <img src="''" />
+        <img src="http://[::1" />
+        <img src=" /images/ok.svg " />
       `,
-      css: `.deck { background-image: url(\" \"); }`,
+      css: `.deck { background-image: url(" "); }`,
       slideCount: 1
     })
 
@@ -183,10 +224,10 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
 
     const issues = await inspector.inspect({
       html: `
-        <img src=\"https://marp.app/assets/with-url.svg\" />
-        <img src=\"https://marp.app/assets/empty.svg\" />
-        <img src=\"https://marp.app/assets/json.svg\" />
-        <img src=\"https://marp.app/assets/circular.svg\" />
+        <img src="https://marp.app/assets/with-url.svg" />
+        <img src="https://marp.app/assets/empty.svg" />
+        <img src="https://marp.app/assets/json.svg" />
+        <img src="https://marp.app/assets/circular.svg" />
       `,
       css: '',
       slideCount: 1

@@ -193,7 +193,11 @@ export class BrowserSlidesDiagnosticsInspector implements SlidesDiagnosticsInspe
     }
 
     for (const styleElement of parsedDocument.querySelectorAll('style')) {
-      const styleText = styleElement.textContent ?? ''
+      const styleText = styleElement.textContent
+
+      if (!styleText) {
+        continue
+      }
 
       for (const cssUrl of this.extractUrlsFromCss(styleText)) {
         pushUrl(cssUrl)
@@ -258,13 +262,9 @@ export class BrowserSlidesDiagnosticsInspector implements SlidesDiagnosticsInspe
     let nextIndex = 0
 
     const workers = Array.from({ length: Math.min(this.maxConcurrency, urls.length) }, async () => {
-      while (true) {
+      while (nextIndex < urls.length) {
         const currentIndex = nextIndex
         nextIndex += 1
-
-        if (currentIndex >= urls.length) {
-          return
-        }
 
         const issue = await this.probeUrl(urls[currentIndex])
 

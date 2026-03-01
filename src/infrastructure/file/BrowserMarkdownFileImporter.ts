@@ -24,10 +24,10 @@ export class BrowserMarkdownFileImporter implements MarkdownFileImporter {
     input.type = 'file'
     input.accept = '.md,.markdown,text/markdown,text/plain'
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       input.addEventListener(
         'change',
-        async () => {
+        () => {
           const file = input.files?.[0]
 
           if (!file) {
@@ -35,7 +35,7 @@ export class BrowserMarkdownFileImporter implements MarkdownFileImporter {
             return
           }
 
-          resolve(await file.text())
+          void file.text().then(resolve, reject)
         },
         { once: true }
       )

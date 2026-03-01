@@ -25,6 +25,16 @@ describe('I18nContext', () => {
     expect(screen.getByText('MD Slides')).toBeInTheDocument()
   })
 
+  it('keeps locale unchanged when setLocale is called without provider', async () => {
+    render(<LocaleProbe />)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Switch to ru' }))
+
+    expect(screen.getByTestId('locale-value')).toHaveTextContent('en')
+    expect(screen.getByText('MD Slides')).toBeInTheDocument()
+  })
+
   it('respects initial locale and updates locale via setLocale', async () => {
     render(
       <I18nProvider initialLocale="kk">

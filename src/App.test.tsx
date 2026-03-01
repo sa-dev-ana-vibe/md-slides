@@ -19,7 +19,7 @@ function TestEditor({ value, onChange }: MarkdownEditorAdapterProps) {
 }
 
 function getPreviewDiagnosticsChannelId(): string {
-  const previewFrame = screen.getByTitle('Slides preview') as HTMLIFrameElement
+  const previewFrame = screen.getByTitle<HTMLIFrameElement>('Slides preview')
   const match = previewFrame.srcdoc.match(/DIAGNOSTICS_CHANNEL_ID = ([^;]+);/)
 
   if (!match) {

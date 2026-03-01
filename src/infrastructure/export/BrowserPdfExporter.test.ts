@@ -70,6 +70,23 @@ function createPrintableIframe(contentWindow: unknown) {
   }
 }
 
+function expectPromiseToRejectWithMessage(promise: Promise<unknown>, expectedMessage: string): Promise<void> {
+  return promise.then(
+    () => {
+      throw new Error(`Expected promise to reject with: ${expectedMessage}`)
+    },
+    (error: unknown) => {
+      expect(error).toBeInstanceOf(Error)
+
+      if (!(error instanceof Error)) {
+        return
+      }
+
+      expect(error.message).toBe(expectedMessage)
+    }
+  )
+}
+
 describe('BrowserPdfExporter', () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -344,7 +361,7 @@ describe('BrowserPdfExporter', () => {
     })
 
     const exportPromise = exporter.export('# title')
-    const rejection = expect(exportPromise).rejects.toThrow('Timed out waiting for print frame to load.')
+    const rejection = expectPromiseToRejectWithMessage(exportPromise, 'Timed out waiting for print frame to load.')
     await vi.advanceTimersByTimeAsync(21)
     await rejection
     expect(iframe.remove).toHaveBeenCalledTimes(1)
@@ -385,7 +402,7 @@ describe('BrowserPdfExporter', () => {
     })
 
     const exportPromise = exporter.export('# title')
-    const rejection = expect(exportPromise).rejects.toThrow('Print dialog did not start.')
+    const rejection = expectPromiseToRejectWithMessage(exportPromise, 'Print dialog did not start.')
     await vi.advanceTimersByTimeAsync(31)
     await rejection
     expect(iframe.remove).toHaveBeenCalledTimes(1)
@@ -430,7 +447,7 @@ describe('BrowserPdfExporter', () => {
     })
 
     const exportPromise = exporter.export('# title')
-    const rejection = expect(exportPromise).rejects.toThrow('Timed out waiting for print dialog to close.')
+    const rejection = expectPromiseToRejectWithMessage(exportPromise, 'Timed out waiting for print dialog to close.')
     await vi.advanceTimersByTimeAsync(41)
     await rejection
     expect(iframe.remove).toHaveBeenCalledTimes(1)
