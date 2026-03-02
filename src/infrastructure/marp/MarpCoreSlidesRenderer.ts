@@ -10,6 +10,7 @@ export class MarpCoreSlidesRenderer implements SlidesRenderer {
       marp ??
       new Marp({
         math: false,
+        html: true,
         emoji: {
           shortcode: true,
           unicode: true
