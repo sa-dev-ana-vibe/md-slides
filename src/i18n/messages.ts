@@ -11,6 +11,10 @@ export interface AppMessages {
   exportingHtml: string
   exportPdf: string
   exportingPdf: string
+  enterPresentation: string
+  presentationModeLabel: string
+  exitPresentation: string
+  slidesPresentation: string
   addMarkdownToEnablePdfExport: string
   checkingPreviewResourcesToEnablePdfExport: string
   resolvePreviewLoadingErrorsToExportPdf: string
@@ -53,6 +57,10 @@ const englishMessages: AppMessages = {
   exportingHtml: 'Exporting HTML...',
   exportPdf: 'Export PDF',
   exportingPdf: 'Exporting PDF...',
+  enterPresentation: 'Present',
+  presentationModeLabel: 'Presentation mode',
+  exitPresentation: 'Exit presentation',
+  slidesPresentation: 'Slides presentation',
   addMarkdownToEnablePdfExport: 'Add markdown to enable PDF export.',
   checkingPreviewResourcesToEnablePdfExport: 'Checking external resources before enabling PDF export.',
   resolvePreviewLoadingErrorsToExportPdf: 'Resolve preview loading errors to export PDF.',
@@ -85,6 +93,10 @@ const russianMessages: AppMessages = {
   exportingHtml: 'Экспорт HTML...',
   exportPdf: 'Экспорт PDF',
   exportingPdf: 'Экспорт PDF...',
+  enterPresentation: 'Презентация',
+  presentationModeLabel: 'Режим презентации',
+  exitPresentation: 'Выйти из презентации',
+  slidesPresentation: 'Показ слайдов',
   addMarkdownToEnablePdfExport: 'Добавьте markdown, чтобы включить экспорт PDF.',
   checkingPreviewResourcesToEnablePdfExport: 'Проверяем внешние ресурсы перед включением экспорта PDF.',
   resolvePreviewLoadingErrorsToExportPdf: 'Исправьте ошибки предпросмотра, чтобы экспортировать PDF.',
@@ -122,6 +134,10 @@ const kazakhMessages: AppMessages = {
   exportingHtml: 'HTML экспортталуда...',
   exportPdf: 'PDF экспорттау',
   exportingPdf: 'PDF экспортталуда...',
+  enterPresentation: 'Презентация',
+  presentationModeLabel: 'Презентация режимі',
+  exitPresentation: 'Презентациядан шығу',
+  slidesPresentation: 'Слайд көрсетілімі',
   addMarkdownToEnablePdfExport: 'PDF экспортын қосу үшін markdown енгізіңіз.',
   checkingPreviewResourcesToEnablePdfExport: 'PDF экспортын қоспас бұрын сыртқы ресурстар тексерілуде.',
   resolvePreviewLoadingErrorsToExportPdf: 'PDF экспорттау үшін алдын ала қарау қателерін түзетіңіз.',

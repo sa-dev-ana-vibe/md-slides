@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { MarkdownEditorAdapterProps } from './components/MarkdownEditorPane'
 import { DIAGNOSTICS_MESSAGE_SOURCE } from './infrastructure/export/diagnostics'
+import { PRESENTATION_MESSAGE_SOURCE } from './infrastructure/presentation/messages'
 import { createFakeServices } from './test/fakes'
 import { renderWithServices } from './test/renderWithServices'
 
@@ -29,6 +30,17 @@ function getPreviewDiagnosticsChannelId(): string {
   return JSON.parse(match[1]) as string
 }
 
+function getPresentationChannelId(): string {
+  const presentationFrame = screen.getByTitle<HTMLIFrameElement>('Slides presentation')
+  const match = presentationFrame.srcdoc.match(/PRESENTATION_CHANNEL_ID = ([^;]+);/)
+
+  if (!match) {
+    throw new Error('Unable to find presentation channel id in presentation frame HTML.')
+  }
+
+  return JSON.parse(match[1]) as string
+}
+
 function createDeferred<T>() {
   let resolve: (value: T | PromiseLike<T>) => void = () => undefined
   let reject: (reason?: unknown) => void = () => undefined
@@ -48,6 +60,7 @@ describe('App', () => {
     renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
 
     expect(screen.getByText('MD Slides')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Present' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Export HTML' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
   })
@@ -63,12 +76,14 @@ describe('App', () => {
 
     expect(screen.getByText('MD Слайды')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Открыть .md' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Презентация' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Экспорт HTML' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Экспорт PDF' })).toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('Язык'), 'kk')
     expect(screen.getByText('MD Слайдтар')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '.md ашу' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Презентация' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'HTML экспорттау' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'PDF экспорттау' })).toBeInTheDocument()
   })
@@ -92,6 +107,101 @@ describe('App', () => {
     })
 
     expect(screen.getByText('1 slide')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Present' })).toBeEnabled()
+  })
+
+  it('opens presentation mode and exits on matching message', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Present' })).toBeEnabled()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Present' }))
+
+    expect(screen.getByRole('dialog', { name: 'Presentation mode' })).toBeInTheDocument()
+    expect(screen.getByTitle('Slides presentation')).toBeInTheDocument()
+
+    const presentationChannelId = getPresentationChannelId()
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: PRESENTATION_MESSAGE_SOURCE,
+          type: 'exit',
+          channelId: presentationChannelId
+        }
+      })
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Presentation mode' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('ignores unrelated presentation exit messages', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Present' })).toBeEnabled()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Present' }))
+
+    const presentationChannelId = getPresentationChannelId()
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: PRESENTATION_MESSAGE_SOURCE,
+          type: 'exit',
+          channelId: `${presentationChannelId}-other`
+        }
+      })
+    )
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: 'other-source',
+          type: 'exit',
+          channelId: presentationChannelId
+        }
+      })
+    )
+
+    expect(screen.getByRole('dialog', { name: 'Presentation mode' })).toBeInTheDocument()
+  })
+
+  it('closes presentation mode when deck becomes empty', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Present' })).toBeEnabled()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Present' }))
+    expect(screen.getByRole('dialog', { name: 'Presentation mode' })).toBeInTheDocument()
+
+    await user.clear(screen.getByTestId('app-markdown-input'))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Presentation mode' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Present' })).toBeDisabled()
+    })
   })
 
   it('disables pdf while diagnostics probe is pending', async () => {

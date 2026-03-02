@@ -6,9 +6,11 @@ import { PreviewPane } from './components/PreviewPane'
 import { DropZone } from './components/DropZone'
 import { ErrorBanner } from './components/ErrorBanner'
 import { LanguagePicker } from './components/LanguagePicker'
+import { PresentationOverlay } from './components/PresentationOverlay'
 import type { ExportFormat, RenderResult } from './domain/types'
 import { buildStandaloneHtml } from './infrastructure/export/buildStandaloneHtml'
 import { asDiagnosticsMessage, createDiagnosticsChannelId } from './infrastructure/export/diagnostics'
+import { createPresentationChannelId } from './infrastructure/presentation/messages'
 import { useI18n } from './i18n/I18nContext'
 
 const EMPTY_RENDER_RESULT: RenderResult = {
@@ -45,6 +47,10 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
   const [previewDiagnosticsPending, setPreviewDiagnosticsPending] = useState(false)
   const [previewDiagnosticsChannelId, setPreviewDiagnosticsChannelId] = useState(() =>
     createDiagnosticsChannelId('preview')
+  )
+  const [isPresentationOpen, setIsPresentationOpen] = useState(false)
+  const [presentationChannelId, setPresentationChannelId] = useState(() =>
+    createPresentationChannelId('presentation')
   )
 
   const markdownRef = useRef(markdown)
@@ -168,6 +174,7 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
   const hasMarkdown = markdown.trim().length > 0
   const canExportHtml = hasMarkdown
   const canExportPdf = hasMarkdown && !previewDiagnosticsPending && previewDiagnosticErrors.length === 0
+  const canPresent = renderError === null && renderResult.slideCount > 0
 
   const pdfDisabledReason = !hasMarkdown
     ? messages.addMarkdownToEnablePdfExport
@@ -245,12 +252,45 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     [messages, replaceMarkdownWithConfirmation, services.importer]
   )
 
+  const handleEnterPresentation = useCallback(() => {
+    if (!canPresent) {
+      return
+    }
+
+    setPresentationChannelId(createPresentationChannelId('presentation'))
+    setIsPresentationOpen(true)
+  }, [canPresent])
+
+  const handleExitPresentation = useCallback(() => {
+    setIsPresentationOpen(false)
+  }, [])
+
+  useEffect(() => {
+    if (!isPresentationOpen) {
+      return
+    }
+
+    if (!canPresent) {
+      setIsPresentationOpen(false)
+    }
+  }, [canPresent, isPresentationOpen])
+
   const previewDocumentHtml = useMemo(
     () =>
       buildStandaloneHtml(renderResult, messages.previewDocumentTitle, {
         diagnosticsChannelId: previewDiagnosticsChannelId
       }),
     [messages.previewDocumentTitle, previewDiagnosticsChannelId, renderResult]
+  )
+
+  const presentationDocumentHtml = useMemo(
+    () =>
+      buildStandaloneHtml(renderResult, messages.presentationModeLabel, {
+        presentation: {
+          channelId: presentationChannelId
+        }
+      }),
+    [messages.presentationModeLabel, presentationChannelId, renderResult]
   )
 
   return (
@@ -267,11 +307,13 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
         <Toolbar
           canExportHtml={canExportHtml}
           canExportPdf={canExportPdf}
+          canPresent={canPresent}
           busyAction={busyAction}
           pdfDisabledReason={pdfDisabledReason}
           onOpenMarkdown={() => {
             void handleOpenMarkdown()
           }}
+          onEnterPresentation={handleEnterPresentation}
           onExportHtml={() => {
             void runExport('html', () => services.htmlExporter.export(markdown))
           }}
@@ -296,6 +338,14 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
           />
         </div>
       </main>
+
+      {isPresentationOpen && (
+        <PresentationOverlay
+          documentHtml={presentationDocumentHtml}
+          channelId={presentationChannelId}
+          onExit={handleExitPresentation}
+        />
+      )}
     </div>
   )
 }

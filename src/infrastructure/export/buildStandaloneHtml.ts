@@ -1,8 +1,12 @@
 import type { RenderResult } from '../../domain/types'
 import { DIAGNOSTICS_MESSAGE_SOURCE } from './diagnostics'
+import { PRESENTATION_MESSAGE_SOURCE } from '../presentation/messages'
 
 export interface StandaloneHtmlOptions {
   diagnosticsChannelId?: string
+  presentation?: {
+    channelId: string
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -93,12 +97,180 @@ function buildDiagnosticsScript(diagnosticsChannelId: string): string {
   })();</script>`
 }
 
+function buildPresentationStyle(): string {
+  return `<style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    div.marpit {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+
+    div.marpit > svg[data-marpit-svg] {
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw;
+      max-height: 100vh;
+      display: none;
+    }
+
+    div.marpit > svg[data-marpit-svg][data-presentation-visible="true"] {
+      display: block;
+    }
+  </style>`
+}
+
+function buildPresentationScript(channelId: string): string {
+  const channelLiteral = JSON.stringify(channelId)
+  const sourceLiteral = JSON.stringify(PRESENTATION_MESSAGE_SOURCE)
+
+  return `<script>(() => {
+    const PRESENTATION_CHANNEL_ID = ${channelLiteral};
+    const PRESENTATION_SOURCE = ${sourceLiteral};
+    const slides = Array.from(document.querySelectorAll('svg[data-marpit-svg]'));
+    const nextKeys = new Set(['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter']);
+    const previousKeys = new Set(['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace']);
+    const maxIndex = Math.max(slides.length - 1, 0);
+    let currentIndex = 0;
+
+    const clamp = (index) => Math.min(Math.max(index, 0), maxIndex);
+
+    const render = () => {
+      slides.forEach((slide, index) => {
+        slide.setAttribute('data-presentation-visible', index === currentIndex ? 'true' : 'false');
+      });
+    };
+
+    const navigateTo = (index) => {
+      const nextIndex = clamp(index);
+
+      if (nextIndex === currentIndex) {
+        return;
+      }
+
+      currentIndex = nextIndex;
+      render();
+    };
+
+    const navigatePrevious = () => {
+      navigateTo(currentIndex - 1);
+    };
+
+    const navigateNext = () => {
+      navigateTo(currentIndex + 1);
+    };
+
+    const emitExit = () => {
+      window.parent.postMessage({
+        source: PRESENTATION_SOURCE,
+        type: 'exit',
+        channelId: PRESENTATION_CHANNEL_ID
+      }, '*');
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        emitExit();
+        return;
+      }
+
+      if (event.key === 'Home') {
+        event.preventDefault();
+        navigateTo(0);
+        return;
+      }
+
+      if (event.key === 'End') {
+        event.preventDefault();
+        navigateTo(maxIndex);
+        return;
+      }
+
+      if (nextKeys.has(event.key)) {
+        event.preventDefault();
+        navigateNext();
+        return;
+      }
+
+      if (previousKeys.has(event.key)) {
+        event.preventDefault();
+        navigatePrevious();
+      }
+    };
+
+    const handleClick = (event) => {
+      if (event.defaultPrevented || event.button !== 0) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (target && typeof target.closest === 'function' && target.closest('a, button, input, textarea, select, summary, label')) {
+        return;
+      }
+
+      const width = window.innerWidth;
+
+      if (width <= 0) {
+        return;
+      }
+
+      const leftBoundary = width / 3;
+      const rightBoundary = (width / 3) * 2;
+
+      if (event.clientX < leftBoundary) {
+        navigatePrevious();
+        return;
+      }
+
+      if (event.clientX > rightBoundary) {
+        navigateNext();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('click', handleClick);
+
+    if (slides.length > 0) {
+      render();
+    }
+
+    if (document.body && typeof document.body.focus === 'function') {
+      document.body.tabIndex = -1;
+      document.body.focus();
+    }
+  })();</script>`
+}
+
 export function buildStandaloneHtml(
   renderResult: RenderResult,
   title = 'MD Slides',
   options: StandaloneHtmlOptions = {}
 ): string {
   const diagnosticsScript = options.diagnosticsChannelId ? buildDiagnosticsScript(options.diagnosticsChannelId) : ''
+  const presentationStyle = options.presentation ? buildPresentationStyle() : ''
+  const presentationScript = options.presentation ? buildPresentationScript(options.presentation.channelId) : ''
 
   return `<!doctype html>
 <html lang="en">
@@ -107,10 +279,12 @@ export function buildStandaloneHtml(
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${escapeHtml(title)}</title>
     <style>${renderResult.css}</style>
+    ${presentationStyle}
   </head>
   <body>
     ${renderResult.html}
     ${diagnosticsScript}
+    ${presentationScript}
   </body>
 </html>`
 }

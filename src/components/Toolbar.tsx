@@ -4,9 +4,11 @@ import { useI18n } from '../i18n/I18nContext'
 interface ToolbarProps {
   canExportHtml: boolean
   canExportPdf: boolean
+  canPresent: boolean
   busyAction: ExportFormat | 'open' | null
   pdfDisabledReason?: string
   onOpenMarkdown: () => void
+  onEnterPresentation: () => void
   onExportHtml: () => void
   onExportPdf: () => void
 }
@@ -23,14 +25,17 @@ function buttonClass(disabled: boolean): string {
 export function Toolbar({
   canExportHtml,
   canExportPdf,
+  canPresent,
   busyAction,
   pdfDisabledReason,
   onOpenMarkdown,
+  onEnterPresentation,
   onExportHtml,
   onExportPdf
 }: ToolbarProps) {
   const { messages } = useI18n()
   const controlsDisabled = busyAction !== null
+  const presentationDisabled = controlsDisabled || !canPresent
   const htmlDisabled = controlsDisabled || !canExportHtml
   const pdfDisabled = controlsDisabled || !canExportPdf
 
@@ -38,6 +43,14 @@ export function Toolbar({
     <div className="flex flex-wrap items-center gap-2" aria-label={messages.toolbarLabel}>
       <button type="button" className={buttonClass(controlsDisabled)} onClick={onOpenMarkdown} disabled={controlsDisabled}>
         {busyAction === 'open' ? messages.openingMarkdown : messages.openMarkdown}
+      </button>
+      <button
+        type="button"
+        className={buttonClass(presentationDisabled)}
+        onClick={onEnterPresentation}
+        disabled={presentationDisabled}
+      >
+        {messages.enterPresentation}
       </button>
       <button type="button" className={buttonClass(htmlDisabled)} onClick={onExportHtml} disabled={htmlDisabled}>
         {busyAction === 'html' ? messages.exportingHtml : messages.exportHtml}
