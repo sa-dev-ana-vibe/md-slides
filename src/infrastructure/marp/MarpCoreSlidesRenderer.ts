@@ -9,7 +9,7 @@ export class MarpCoreSlidesRenderer implements SlidesRenderer {
     this.marp =
       marp ??
       new Marp({
-        math: false,
+        math: true,
         html: true,
         emoji: {
           shortcode: true,
@@ -22,13 +22,11 @@ export class MarpCoreSlidesRenderer implements SlidesRenderer {
   }
 
   render(markdown: string): RenderResult {
-    const { html, css } = this.marp.render(markdown)
-    const slideCount = (html.match(/<svg\b[^>]*data-marpit-svg/g) ?? []).length
+    const { html, css } = this.marp.render(markdown, { htmlAsArray: true })
 
     return {
       html,
-      css,
-      slideCount
+      css
     }
   }
 }

@@ -146,7 +146,7 @@ export class BrowserSlidesDiagnosticsInspector implements SlidesDiagnosticsInspe
       pushUrl(cssUrl)
     }
 
-    const parsedDocument = new DOMParser().parseFromString(renderResult.html, 'text/html')
+    const parsedDocument = new DOMParser().parseFromString(renderResult.html.join(''), 'text/html')
     const allElements = parsedDocument.querySelectorAll('*')
 
     for (const element of allElements) {

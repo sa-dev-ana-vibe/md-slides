@@ -3,9 +3,13 @@ import type { AppServices, BeforeUnloadGuard } from '../domain/services'
 import type { RenderResult } from '../domain/types'
 
 const defaultRenderResult = (markdown: string): RenderResult => ({
-  html: `<div class="marpit"><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section><h1>${markdown}</h1></section></foreignObject></svg></div>`,
-  css: '.marpit { color: black; }',
-  slideCount: markdown.trim().length > 0 ? 1 : 0
+  html:
+    markdown.trim().length > 0
+      ? [
+          `<svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section><h1>${markdown}</h1></section></foreignObject></svg>`
+        ]
+      : [],
+  css: '.marpit { color: black; }'
 })
 
 export interface FakeServicesBundle {

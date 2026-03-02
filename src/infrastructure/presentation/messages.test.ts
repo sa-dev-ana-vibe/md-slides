@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { asPresentationExitMessage, createPresentationChannelId, PRESENTATION_MESSAGE_SOURCE } from './messages'
+import { asPresentationMessage, createPresentationChannelId, PRESENTATION_MESSAGE_SOURCE } from './messages'
 
 describe('presentation messages', () => {
   it('creates unique presentation channel ids', () => {
@@ -12,7 +12,7 @@ describe('presentation messages', () => {
   })
 
   it('parses valid presentation exit message', () => {
-    const message = asPresentationExitMessage({
+    const message = asPresentationMessage({
       source: PRESENTATION_MESSAGE_SOURCE,
       type: 'exit',
       channelId: 'presentation-1'
@@ -25,24 +25,41 @@ describe('presentation messages', () => {
     })
   })
 
+  it('parses valid presentation navigate message', () => {
+    const message = asPresentationMessage({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'navigate',
+      action: 'next',
+      channelId: 'presentation-1'
+    })
+
+    expect(message).toEqual({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'navigate',
+      action: 'next',
+      channelId: 'presentation-1'
+    })
+  })
+
   it('rejects invalid presentation messages', () => {
-    expect(asPresentationExitMessage(null)).toBeNull()
+    expect(asPresentationMessage(null)).toBeNull()
     expect(
-      asPresentationExitMessage({
+      asPresentationMessage({
         source: 'other',
         type: 'exit',
         channelId: 'presentation-1'
       })
     ).toBeNull()
     expect(
-      asPresentationExitMessage({
+      asPresentationMessage({
         source: PRESENTATION_MESSAGE_SOURCE,
-        type: 'unknown',
+        type: 'navigate',
+        action: 'invalid',
         channelId: 'presentation-1'
       })
     ).toBeNull()
     expect(
-      asPresentationExitMessage({
+      asPresentationMessage({
         source: PRESENTATION_MESSAGE_SOURCE,
         type: 'exit',
         channelId: ''

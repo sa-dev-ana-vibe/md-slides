@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { DIAGNOSTICS_MESSAGE_SOURCE } from './diagnostics'
-import { buildStandaloneHtml } from './buildStandaloneHtml'
+import { buildPresentationSlideHtml, buildStandaloneHtml } from './buildStandaloneHtml'
 import { PRESENTATION_MESSAGE_SOURCE } from '../presentation/messages'
 
 describe('buildStandaloneHtml', () => {
-  it('builds html document with title, css, and content', () => {
+  it('builds html document with title, css, and joined slides', () => {
     const documentHtml = buildStandaloneHtml(
       {
-        html: '<div>slides</div>',
-        css: 'body { color: red; }',
-        slideCount: 1
+        html: ['<svg data-marpit-svg="" id="slide-1"></svg>', '<svg data-marpit-svg="" id="slide-2"></svg>'],
+        css: 'body { color: red; }'
       },
       'Deck'
     )
@@ -17,15 +16,14 @@ describe('buildStandaloneHtml', () => {
     expect(documentHtml).toContain('<!doctype html>')
     expect(documentHtml).toContain('<title>Deck</title>')
     expect(documentHtml).toContain('body { color: red; }')
-    expect(documentHtml).toContain('<div>slides</div>')
+    expect(documentHtml).toContain('<div class="marpit"><svg data-marpit-svg="" id="slide-1"></svg><svg data-marpit-svg="" id="slide-2"></svg></div>')
   })
 
   it('escapes html-sensitive title characters', () => {
     const documentHtml = buildStandaloneHtml(
       {
-        html: '<div>slides</div>',
-        css: '',
-        slideCount: 0
+        html: [],
+        css: ''
       },
       '<Deck & "Test">'
     )
@@ -36,9 +34,8 @@ describe('buildStandaloneHtml', () => {
   it('injects diagnostics script when channel id is provided', () => {
     const documentHtml = buildStandaloneHtml(
       {
-        html: '<div>slides</div>',
-        css: '',
-        slideCount: 0
+        html: ['<svg data-marpit-svg="" id="slide"></svg>'],
+        css: ''
       },
       'Deck',
       { diagnosticsChannelId: 'preview-1' }
@@ -49,21 +46,22 @@ describe('buildStandaloneHtml', () => {
     expect(documentHtml).toContain("window.parent.postMessage")
   })
 
-  it('injects presentation styles and script when presentation channel is provided', () => {
-    const documentHtml = buildStandaloneHtml(
-      {
-        html: '<div>slides</div>',
-        css: '',
-        slideCount: 0
-      },
+  it('builds presentation html for single slide and bridge script', () => {
+    const documentHtml = buildPresentationSlideHtml(
+      '<svg data-marpit-svg="" id="slide-1"></svg>',
+      'section { color: white; }',
       'Deck',
-      { presentation: { channelId: 'presentation-1' } }
+      { channelId: 'presentation-1' }
     )
 
-    expect(documentHtml).toContain('data-presentation-visible')
-    expect(documentHtml).toContain('querySelectorAll(\'svg[data-marpit-svg]\')')
+    expect(documentHtml).toContain('<div class="marpit"><svg data-marpit-svg="" id="slide-1"></svg></div>')
+    expect(documentHtml).toContain("type: 'navigate'")
     expect(documentHtml).toContain('PRESENTATION_CHANNEL_ID = "presentation-1"')
     expect(documentHtml).toContain(`PRESENTATION_SOURCE = "${PRESENTATION_MESSAGE_SOURCE}"`)
+    expect(documentHtml).toContain("emitNavigate('next')")
+    expect(documentHtml).toContain("emitNavigate('previous')")
+    expect(documentHtml).toContain("emitNavigate('first')")
+    expect(documentHtml).toContain("emitNavigate('last')")
     expect(documentHtml).toContain("type: 'exit'")
   })
 })

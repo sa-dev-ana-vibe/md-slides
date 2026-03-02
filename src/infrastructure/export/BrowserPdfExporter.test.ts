@@ -93,7 +93,7 @@ describe('BrowserPdfExporter', () => {
   })
 
   it('fails fast when diagnostics inspector reports resource issues', async () => {
-    const renderedResult = { html: '<div>slides</div>', css: '', slideCount: 1 }
+    const renderedResult = { html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }
     const renderer = {
       render: vi.fn(() => renderedResult)
     }
@@ -124,7 +124,7 @@ describe('BrowserPdfExporter', () => {
 
   it('prints deck through hidden iframe and cleans up listeners', async () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '.deck{}', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '.deck{}' }))
     }
 
     const hostWindow = createLifecycleTarget()
@@ -162,7 +162,7 @@ describe('BrowserPdfExporter', () => {
 
     expect(renderer.render).toHaveBeenCalledWith('# title')
     expect(appendChild).toHaveBeenCalledWith(iframe)
-    expect(iframe.srcdoc).toContain('<div>slides</div>')
+    expect(iframe.srcdoc).toContain('<div class="marpit"><svg data-marpit-svg="" id="slide"></svg></div>')
     expect(frameWindow.focus).toHaveBeenCalledTimes(1)
     expect(frameWindow.print).toHaveBeenCalledTimes(1)
     expect(iframe.remove).toHaveBeenCalledTimes(1)
@@ -175,7 +175,7 @@ describe('BrowserPdfExporter', () => {
 
   it('handles afterprint-only lifecycle events', async () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const frameWindowTarget = createLifecycleTarget()
@@ -213,7 +213,7 @@ describe('BrowserPdfExporter', () => {
 
   it('fails with diagnostics error from print frame', async () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const messageTarget = createMessageTarget()
@@ -266,7 +266,7 @@ describe('BrowserPdfExporter', () => {
 
   it('ignores unrelated diagnostics messages', async () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const messageTarget = createMessageTarget()
@@ -323,7 +323,7 @@ describe('BrowserPdfExporter', () => {
 
   it('throws when iframe host document has no body', async () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const exporter = new BrowserPdfExporter({
@@ -340,7 +340,7 @@ describe('BrowserPdfExporter', () => {
     vi.useFakeTimers()
 
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const iframe = createPrintableIframe({
@@ -371,7 +371,7 @@ describe('BrowserPdfExporter', () => {
     vi.useFakeTimers()
 
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const hostWindow = createLifecycleTarget()
@@ -416,7 +416,7 @@ describe('BrowserPdfExporter', () => {
     vi.useFakeTimers()
 
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const frameWindowTarget = createLifecycleTarget()
@@ -455,7 +455,7 @@ describe('BrowserPdfExporter', () => {
 
   it('fails when iframe contentWindow is unavailable', async () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const iframe = createPrintableIframe(null)
@@ -479,7 +479,7 @@ describe('BrowserPdfExporter', () => {
 
   it('fails when print throws and still cleans up', async () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const hostWindow = createLifecycleTarget()

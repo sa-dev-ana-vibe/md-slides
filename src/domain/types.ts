@@ -1,7 +1,6 @@
 export type ExportFormat = 'html' | 'pdf'
 
 export interface RenderResult {
-  html: string
+  html: string[]
   css: string
-  slideCount: number
 }

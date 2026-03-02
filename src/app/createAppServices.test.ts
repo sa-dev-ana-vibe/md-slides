@@ -15,7 +15,7 @@ describe('createAppServices', () => {
   })
 
   it('applies overrides', async () => {
-    const renderer = { render: vi.fn(() => ({ html: '', css: '', slideCount: 0 })) }
+    const renderer = { render: vi.fn(() => ({ html: [], css: '' })) }
 
     const services = createAppServices({ renderer })
     services.renderer.render('# test')

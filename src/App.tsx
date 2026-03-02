@@ -14,9 +14,8 @@ import { createPresentationChannelId } from './infrastructure/presentation/messa
 import { useI18n } from './i18n/I18nContext'
 
 const EMPTY_RENDER_RESULT: RenderResult = {
-  html: '',
-  css: '',
-  slideCount: 0
+  html: [],
+  css: ''
 }
 
 export const RENDER_DEBOUNCE_MS = 150
@@ -171,10 +170,11 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     [activePreviewDiagnosticErrors, passivePreviewDiagnosticErrors]
   )
 
+  const slideCount = renderResult.html.length
   const hasMarkdown = markdown.trim().length > 0
   const canExportHtml = hasMarkdown
   const canExportPdf = hasMarkdown && !previewDiagnosticsPending && previewDiagnosticErrors.length === 0
-  const canPresent = renderError === null && renderResult.slideCount > 0
+  const canPresent = renderError === null && slideCount > 0
 
   const pdfDisabledReason = !hasMarkdown
     ? messages.addMarkdownToEnablePdfExport
@@ -283,16 +283,6 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     [messages.previewDocumentTitle, previewDiagnosticsChannelId, renderResult]
   )
 
-  const presentationDocumentHtml = useMemo(
-    () =>
-      buildStandaloneHtml(renderResult, messages.presentationModeLabel, {
-        presentation: {
-          channelId: presentationChannelId
-        }
-      }),
-    [messages.presentationModeLabel, presentationChannelId, renderResult]
-  )
-
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-4 p-4 lg:p-6">
@@ -331,7 +321,7 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
 
           <PreviewPane
             documentHtml={previewDocumentHtml}
-            slideCount={renderResult.slideCount}
+            slideCount={slideCount}
             diagnosticErrors={previewDiagnosticErrors}
             diagnosticsPending={previewDiagnosticsPending}
             errorMessage={renderError}
@@ -341,7 +331,8 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
 
       {isPresentationOpen && (
         <PresentationOverlay
-          documentHtml={presentationDocumentHtml}
+          slidesHtml={renderResult.html}
+          css={renderResult.css}
           channelId={presentationChannelId}
           onExit={handleExitPresentation}
         />

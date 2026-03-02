@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PresentationOverlay } from './PresentationOverlay'
 import { PRESENTATION_MESSAGE_SOURCE } from '../infrastructure/presentation/messages'
@@ -26,6 +26,22 @@ function definePrototypeValue<T extends object, K extends PropertyKey>(
   }
 }
 
+function renderOverlay(onExit = vi.fn()) {
+  render(
+    <PresentationOverlay
+      slidesHtml={[
+        '<svg data-marpit-svg="" id="slide-1"><foreignObject><section><h1>Slide 1</h1></section></foreignObject></svg>',
+        '<svg data-marpit-svg="" id="slide-2"><foreignObject><section><h1>Slide 2</h1></section></foreignObject></svg>'
+      ]}
+      css=".marpit{}"
+      channelId="presentation-7"
+      onExit={onExit}
+    />
+  )
+
+  return { onExit }
+}
+
 describe('PresentationOverlay', () => {
   afterEach(() => {
     cleanup()
@@ -35,7 +51,7 @@ describe('PresentationOverlay', () => {
     const requestFullscreen = vi.fn(async () => undefined)
     const restore = definePrototypeValue(HTMLElement.prototype, 'requestFullscreen', requestFullscreen)
 
-    render(<PresentationOverlay documentHtml="<html></html>" channelId="presentation-1" onExit={vi.fn()} />)
+    renderOverlay()
 
     expect(requestFullscreen).toHaveBeenCalledTimes(1)
     restore()
@@ -47,17 +63,143 @@ describe('PresentationOverlay', () => {
     })
     const restore = definePrototypeValue(HTMLElement.prototype, 'requestFullscreen', requestFullscreen)
 
-    render(<PresentationOverlay documentHtml="<html></html>" channelId="presentation-1" onExit={vi.fn()} />)
+    renderOverlay()
 
     expect(screen.getByRole('dialog', { name: 'Presentation mode' })).toBeInTheDocument()
     expect(screen.getByTitle('Slides presentation')).toBeInTheDocument()
     restore()
   })
 
-  it('exits when receiving matching postMessage', () => {
-    const onExit = vi.fn()
+  it('navigates slides via presentation messages', async () => {
+    renderOverlay()
 
-    render(<PresentationOverlay documentHtml="<html></html>" channelId="presentation-7" onExit={onExit} />)
+    const frame = screen.getByTitle<HTMLIFrameElement>('Slides presentation')
+    expect(frame.srcdoc).toContain('id="slide-1"')
+    expect(screen.getByText('1 / 2')).toBeInTheDocument()
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: PRESENTATION_MESSAGE_SOURCE,
+          type: 'navigate',
+          action: 'next',
+          channelId: 'presentation-7'
+        }
+      })
+    )
+
+    await waitFor(() => {
+      expect(frame.srcdoc).toContain('id="slide-2"')
+      expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    })
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: PRESENTATION_MESSAGE_SOURCE,
+          type: 'navigate',
+          action: 'previous',
+          channelId: 'presentation-7'
+        }
+      })
+    )
+
+    await waitFor(() => {
+      expect(frame.srcdoc).toContain('id="slide-1"')
+      expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    })
+  })
+
+  it('navigates slides with keyboard without iframe focus', async () => {
+    renderOverlay()
+
+    const frame = screen.getByTitle<HTMLIFrameElement>('Slides presentation')
+    expect(frame.srcdoc).toContain('id="slide-1"')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+
+    await waitFor(() => {
+      expect(frame.srcdoc).toContain('id="slide-2"')
+      expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    })
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+
+    await waitFor(() => {
+      expect(frame.srcdoc).toContain('id="slide-1"')
+      expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    })
+  })
+
+  it('clamps navigation boundaries', async () => {
+    renderOverlay()
+
+    const frame = screen.getByTitle<HTMLIFrameElement>('Slides presentation')
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: PRESENTATION_MESSAGE_SOURCE,
+          type: 'navigate',
+          action: 'previous',
+          channelId: 'presentation-7'
+        }
+      })
+    )
+
+    await waitFor(() => {
+      expect(frame.srcdoc).toContain('id="slide-1"')
+      expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    })
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: PRESENTATION_MESSAGE_SOURCE,
+          type: 'navigate',
+          action: 'last',
+          channelId: 'presentation-7'
+        }
+      })
+    )
+    await waitFor(() => {
+      expect(frame.srcdoc).toContain('id="slide-2"')
+      expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    })
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: PRESENTATION_MESSAGE_SOURCE,
+          type: 'navigate',
+          action: 'next',
+          channelId: 'presentation-7'
+        }
+      })
+    )
+    await waitFor(() => {
+      expect(frame.srcdoc).toContain('id="slide-2"')
+      expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    })
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: PRESENTATION_MESSAGE_SOURCE,
+          type: 'navigate',
+          action: 'first',
+          channelId: 'presentation-7'
+        }
+      })
+    )
+    await waitFor(() => {
+      expect(frame.srcdoc).toContain('id="slide-1"')
+      expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    })
+  })
+
+  it('exits when receiving matching exit message', () => {
+    const { onExit } = renderOverlay()
 
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -73,9 +215,7 @@ describe('PresentationOverlay', () => {
   })
 
   it('ignores non-matching postMessage payloads', () => {
-    const onExit = vi.fn()
-
-    render(<PresentationOverlay documentHtml="<html></html>" channelId="presentation-7" onExit={onExit} />)
+    const { onExit } = renderOverlay()
 
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -106,7 +246,12 @@ describe('PresentationOverlay', () => {
     const restoreExit = definePrototypeValue(document, 'exitFullscreen', exitFullscreen)
 
     const { unmount, container } = render(
-      <PresentationOverlay documentHtml="<html></html>" channelId="presentation-7" onExit={vi.fn()} />
+      <PresentationOverlay
+        slidesHtml={['<svg data-marpit-svg="" id="slide-1"></svg>']}
+        css=".marpit{}"
+        channelId="presentation-7"
+        onExit={vi.fn()}
+      />
     )
 
     const overlay = container.firstElementChild

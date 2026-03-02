@@ -1,16 +1,39 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useI18n } from '../i18n/I18nContext'
-import { asPresentationExitMessage } from '../infrastructure/presentation/messages'
+import { buildPresentationSlideHtml } from '../infrastructure/export/buildStandaloneHtml'
+import { asPresentationMessage, type PresentationNavigateAction } from '../infrastructure/presentation/messages'
 
 interface PresentationOverlayProps {
-  documentHtml: string
+  slidesHtml: string[]
+  css: string
   channelId: string
   onExit: () => void
 }
 
-export function PresentationOverlay({ documentHtml, channelId, onExit }: PresentationOverlayProps) {
+function clampIndex(index: number, maxIndex: number): number {
+  return Math.min(Math.max(index, 0), maxIndex)
+}
+
+export function PresentationOverlay({ slidesHtml, css, channelId, onExit }: PresentationOverlayProps) {
   const { messages } = useI18n()
   const overlayRef = useRef<HTMLDivElement | null>(null)
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0)
+  const maxSlideIndex = Math.max(slidesHtml.length - 1, 0)
+
+  const navigate = useCallback((action: PresentationNavigateAction) => {
+    setCurrentSlideIndex((currentIndex) => {
+      switch (action) {
+        case 'previous':
+          return clampIndex(currentIndex - 1, maxSlideIndex)
+        case 'next':
+          return clampIndex(currentIndex + 1, maxSlideIndex)
+        case 'first':
+          return 0
+        case 'last':
+          return maxSlideIndex
+      }
+    })
+  }, [maxSlideIndex])
 
   useEffect(() => {
     const overlayElement = overlayRef.current
@@ -48,17 +71,22 @@ export function PresentationOverlay({ documentHtml, channelId, onExit }: Present
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
-      const exitMessage = asPresentationExitMessage(event.data)
+      const presentationMessage = asPresentationMessage(event.data)
 
-      if (!exitMessage) {
+      if (!presentationMessage) {
         return
       }
 
-      if (exitMessage.channelId !== channelId) {
+      if (presentationMessage.channelId !== channelId) {
         return
       }
 
-      onExit()
+      if (presentationMessage.type === 'exit') {
+        onExit()
+        return
+      }
+
+      navigate(presentationMessage.action)
     }
 
     window.addEventListener('message', onMessage)
@@ -66,9 +94,55 @@ export function PresentationOverlay({ documentHtml, channelId, onExit }: Present
     return () => {
       window.removeEventListener('message', onMessage)
     }
-  }, [channelId, onExit])
+  }, [channelId, navigate, onExit])
 
-  const handleHostEscape = (event: KeyboardEvent<HTMLDivElement>) => {
+  useEffect(() => {
+    const nextKeys = new Set(['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'])
+    const previousKeys = new Set(['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'])
+
+    const onWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onExit()
+        return
+      }
+
+      if (event.key === 'Home') {
+        event.preventDefault()
+        navigate('first')
+        return
+      }
+
+      if (event.key === 'End') {
+        event.preventDefault()
+        navigate('last')
+        return
+      }
+
+      if (nextKeys.has(event.key)) {
+        event.preventDefault()
+        navigate('next')
+        return
+      }
+
+      if (previousKeys.has(event.key)) {
+        event.preventDefault()
+        navigate('previous')
+      }
+    }
+
+    window.addEventListener('keydown', onWindowKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', onWindowKeyDown)
+    }
+  }, [navigate, onExit])
+
+  const handleHostEscape = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Escape') {
       return
     }
@@ -76,6 +150,15 @@ export function PresentationOverlay({ documentHtml, channelId, onExit }: Present
     event.preventDefault()
     onExit()
   }
+
+  const effectiveSlideIndex = clampIndex(currentSlideIndex, maxSlideIndex)
+  const currentSlideHtml = slidesHtml[effectiveSlideIndex] ?? ''
+  const iframeDocumentHtml = useMemo(
+    () => buildPresentationSlideHtml(currentSlideHtml, css, messages.presentationModeLabel, { channelId }),
+    [channelId, css, currentSlideHtml, messages.presentationModeLabel]
+  )
+  const totalSlides = slidesHtml.length
+  const currentSlideNumber = totalSlides === 0 ? 0 : effectiveSlideIndex + 1
 
   return (
     <div
@@ -87,7 +170,10 @@ export function PresentationOverlay({ documentHtml, channelId, onExit }: Present
       onKeyDown={handleHostEscape}
     >
       <div className="flex items-center justify-between gap-3 border-b border-white/20 bg-black/80 px-3 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-white/80">{messages.presentationModeLabel}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-white/80">{messages.presentationModeLabel}</span>
+          <span className="text-xs text-white/70">{`${currentSlideNumber} / ${totalSlides}`}</span>
+        </div>
         <button
           type="button"
           className="rounded-md bg-white/15 px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/80"
@@ -96,7 +182,7 @@ export function PresentationOverlay({ documentHtml, channelId, onExit }: Present
           {messages.exitPresentation}
         </button>
       </div>
-      <iframe title={messages.slidesPresentation} srcDoc={documentHtml} className="h-full w-full flex-1 border-0 bg-black" sandbox="allow-scripts" />
+      <iframe title={messages.slidesPresentation} srcDoc={iframeDocumentHtml} className="h-full w-full flex-1 border-0 bg-black" sandbox="allow-scripts" />
     </div>
   )
 }

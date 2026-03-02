@@ -4,9 +4,10 @@ import { PRESENTATION_MESSAGE_SOURCE } from '../presentation/messages'
 
 export interface StandaloneHtmlOptions {
   diagnosticsChannelId?: string
-  presentation?: {
-    channelId: string
-  }
+}
+
+export interface PresentationSlideHtmlOptions {
+  channelId: string
 }
 
 function escapeHtml(value: string): string {
@@ -97,90 +98,30 @@ function buildDiagnosticsScript(diagnosticsChannelId: string): string {
   })();</script>`
 }
 
-function buildPresentationStyle(): string {
-  return `<style>
-    html, body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      overflow: hidden;
-      background: #000;
-    }
-
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    div.marpit {
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #000;
-    }
-
-    div.marpit > svg[data-marpit-svg] {
-      width: 100vw;
-      height: 100vh;
-      max-width: 100vw;
-      max-height: 100vh;
-      display: none;
-    }
-
-    div.marpit > svg[data-marpit-svg][data-presentation-visible="true"] {
-      display: block;
-    }
-  </style>`
-}
-
-function buildPresentationScript(channelId: string): string {
+function buildPresentationBridgeScript(channelId: string): string {
   const channelLiteral = JSON.stringify(channelId)
   const sourceLiteral = JSON.stringify(PRESENTATION_MESSAGE_SOURCE)
 
   return `<script>(() => {
     const PRESENTATION_CHANNEL_ID = ${channelLiteral};
     const PRESENTATION_SOURCE = ${sourceLiteral};
-    const slides = Array.from(document.querySelectorAll('svg[data-marpit-svg]'));
     const nextKeys = new Set(['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter']);
     const previousKeys = new Set(['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace']);
-    const maxIndex = Math.max(slides.length - 1, 0);
-    let currentIndex = 0;
 
-    const clamp = (index) => Math.min(Math.max(index, 0), maxIndex);
-
-    const render = () => {
-      slides.forEach((slide, index) => {
-        slide.setAttribute('data-presentation-visible', index === currentIndex ? 'true' : 'false');
-      });
-    };
-
-    const navigateTo = (index) => {
-      const nextIndex = clamp(index);
-
-      if (nextIndex === currentIndex) {
-        return;
-      }
-
-      currentIndex = nextIndex;
-      render();
-    };
-
-    const navigatePrevious = () => {
-      navigateTo(currentIndex - 1);
-    };
-
-    const navigateNext = () => {
-      navigateTo(currentIndex + 1);
+    const emitNavigate = (action) => {
+      window.parent.postMessage({
+        source: PRESENTATION_SOURCE,
+        channelId: PRESENTATION_CHANNEL_ID,
+        type: 'navigate',
+        action
+      }, '*');
     };
 
     const emitExit = () => {
       window.parent.postMessage({
         source: PRESENTATION_SOURCE,
-        type: 'exit',
-        channelId: PRESENTATION_CHANNEL_ID
+        channelId: PRESENTATION_CHANNEL_ID,
+        type: 'exit'
       }, '*');
     };
 
@@ -197,25 +138,25 @@ function buildPresentationScript(channelId: string): string {
 
       if (event.key === 'Home') {
         event.preventDefault();
-        navigateTo(0);
+        emitNavigate('first');
         return;
       }
 
       if (event.key === 'End') {
         event.preventDefault();
-        navigateTo(maxIndex);
+        emitNavigate('last');
         return;
       }
 
       if (nextKeys.has(event.key)) {
         event.preventDefault();
-        navigateNext();
+        emitNavigate('next');
         return;
       }
 
       if (previousKeys.has(event.key)) {
         event.preventDefault();
-        navigatePrevious();
+        emitNavigate('previous');
       }
     };
 
@@ -240,21 +181,17 @@ function buildPresentationScript(channelId: string): string {
       const rightBoundary = (width / 3) * 2;
 
       if (event.clientX < leftBoundary) {
-        navigatePrevious();
+        emitNavigate('previous');
         return;
       }
 
       if (event.clientX > rightBoundary) {
-        navigateNext();
+        emitNavigate('next');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('click', handleClick);
-
-    if (slides.length > 0) {
-      render();
-    }
 
     if (document.body && typeof document.body.focus === 'function') {
       document.body.tabIndex = -1;
@@ -263,14 +200,16 @@ function buildPresentationScript(channelId: string): string {
   })();</script>`
 }
 
+function buildDeckMarkup(renderResult: RenderResult): string {
+  return `<div class="marpit">${renderResult.html.join('')}</div>`
+}
+
 export function buildStandaloneHtml(
   renderResult: RenderResult,
   title = 'MD Slides',
   options: StandaloneHtmlOptions = {}
 ): string {
   const diagnosticsScript = options.diagnosticsChannelId ? buildDiagnosticsScript(options.diagnosticsChannelId) : ''
-  const presentationStyle = options.presentation ? buildPresentationStyle() : ''
-  const presentationScript = options.presentation ? buildPresentationScript(options.presentation.channelId) : ''
 
   return `<!doctype html>
 <html lang="en">
@@ -279,12 +218,65 @@ export function buildStandaloneHtml(
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${escapeHtml(title)}</title>
     <style>${renderResult.css}</style>
-    ${presentationStyle}
   </head>
   <body>
-    ${renderResult.html}
+    ${buildDeckMarkup(renderResult)}
     ${diagnosticsScript}
-    ${presentationScript}
+  </body>
+</html>`
+}
+
+export function buildPresentationSlideHtml(
+  slideHtml: string,
+  css: string,
+  title = 'MD Slides',
+  options: PresentationSlideHtmlOptions
+): string {
+  const presentationBridgeScript = buildPresentationBridgeScript(options.channelId)
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(title)}</title>
+    <style>${css}</style>
+    <style>
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+      }
+
+      body {
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+      }
+
+      .marpit {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      .marpit > svg[data-marpit-svg] {
+        width: 100vw;
+        height: 100vh;
+        max-width: 100vw;
+        max-height: 100vh;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="marpit">${slideHtml}</div>
+    ${presentationBridgeScript}
   </body>
 </html>`
 }

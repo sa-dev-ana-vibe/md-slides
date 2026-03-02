@@ -4,7 +4,7 @@ import { BrowserHtmlExporter } from './BrowserHtmlExporter'
 describe('BrowserHtmlExporter', () => {
   it('renders and downloads standalone html', () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: 'body{}', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: 'body{}' }))
     }
 
     const createBlob = vi.fn((parts: BlobPart[], options?: BlobPropertyBag) => new Blob(parts, options))
@@ -33,7 +33,7 @@ describe('BrowserHtmlExporter', () => {
 
   it('uses default file name', () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const click = vi.fn()
@@ -53,7 +53,7 @@ describe('BrowserHtmlExporter', () => {
 
   it('supports default browser dependencies', () => {
     const renderer = {
-      render: vi.fn(() => ({ html: '<div>slides</div>', css: '', slideCount: 1 }))
+      render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }))
     }
 
     const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:browser-default')

@@ -90,9 +90,8 @@ describe('App', () => {
 
   it('renders markdown via renderer and updates preview count', async () => {
     const render = vi.fn((markdown: string) => ({
-      html: `<div><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject><section>${markdown}</section></foreignObject></svg></div>`,
-      css: '.x{}',
-      slideCount: 1
+      html: [`<svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject><section>${markdown}</section></foreignObject></svg>`],
+      css: '.x{}'
     }))
 
     const { services } = createFakeServices({ renderer: { render } })
@@ -111,7 +110,14 @@ describe('App', () => {
   })
 
   it('opens presentation mode and exits on matching message', async () => {
-    const { services } = createFakeServices()
+    const render = vi.fn(() => ({
+      html: [
+        '<svg data-marpit-svg="" id="slide-1"><foreignObject><section><h1>One</h1></section></foreignObject></svg>',
+        '<svg data-marpit-svg="" id="slide-2"><foreignObject><section><h1>Two</h1></section></foreignObject></svg>'
+      ],
+      css: '.x{}'
+    }))
+    const { services } = createFakeServices({ renderer: { render } })
 
     renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
 
@@ -126,8 +132,24 @@ describe('App', () => {
 
     expect(screen.getByRole('dialog', { name: 'Presentation mode' })).toBeInTheDocument()
     expect(screen.getByTitle('Slides presentation')).toBeInTheDocument()
+    expect(screen.getByTitle<HTMLIFrameElement>('Slides presentation').srcdoc).toContain('id="slide-1"')
 
     const presentationChannelId = getPresentationChannelId()
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: PRESENTATION_MESSAGE_SOURCE,
+          type: 'navigate',
+          action: 'next',
+          channelId: presentationChannelId
+        }
+      })
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTitle<HTMLIFrameElement>('Slides presentation').srcdoc).toContain('id="slide-2"')
+    })
 
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -594,9 +616,8 @@ describe('App', () => {
   it('uses debounced rendering when renderDebounceMs is positive', async () => {
     vi.useFakeTimers()
     const render = vi.fn((markdown: string) => ({
-      html: `<div><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject><section>${markdown}</section></foreignObject></svg></div>`,
-      css: '.x{}',
-      slideCount: 1
+      html: [`<svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject><section>${markdown}</section></foreignObject></svg>`],
+      css: '.x{}'
     }))
 
     const { services } = createFakeServices({ renderer: { render } })

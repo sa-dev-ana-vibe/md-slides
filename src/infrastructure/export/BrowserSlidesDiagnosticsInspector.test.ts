@@ -15,7 +15,8 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
     })
 
     const issues = await inspector.inspect({
-      html: `
+      html: [
+        `
         <section>
           <img src="https://cdn.example.com/image.svg" />
           <img src="https://cdn.example.com/image.svg" />
@@ -27,9 +28,9 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
             .icon { background-image: url('/icons/mark.svg'); }
           </style>
         </section>
-      `,
-      css: `.deck { background-image: url('https://cdn.example.com/background.svg'); }`,
-      slideCount: 1
+      `
+      ],
+      css: `.deck { background-image: url('https://cdn.example.com/background.svg'); }`
     })
 
     expect(issues).toEqual([])
@@ -57,7 +58,8 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
       })
 
       const issues = await inspector.inspect({
-        html: `
+        html: [
+          `
           <link rel="stylesheet preload" href="/styles/app.css" />
           <link rel="icon" href="/favicon.ico" />
           <link rel="stylesheet" href="#local-style" />
@@ -67,9 +69,9 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
             <source src="/video.mp4" srcset="/img/one.png 1x, /img/two.png 2x" />
           </picture>
           <style></style>
-        `,
-        css: '',
-        slideCount: 1
+        `
+        ],
+        css: ''
       })
 
       expect(issues).toEqual([])
@@ -98,13 +100,14 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
     })
 
     const issues = await inspector.inspect({
-      html: `
+      html: [
+        `
         <a href="https://marp.app/">Marp</a>
         <a href="#local-slide">Local slide</a>
         <img src="/images/hero.png" />
-      `,
-      css: '',
-      slideCount: 1
+      `
+      ],
+      css: ''
     })
 
     expect(issues).toEqual([])
@@ -126,9 +129,8 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
     })
 
     const issues = await inspector.inspect({
-      html: '<img src="https://marp.app/assets/marp.svg" />',
-      css: '',
-      slideCount: 1
+      html: ['<img src="https://marp.app/assets/marp.svg" />'],
+      css: ''
     })
 
     expect(issues).toEqual(['net::ERR_CONNECTION_CLOSED: https://marp.app/assets/marp.svg'])
@@ -153,9 +155,8 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
     })
 
     const inspectPromise = inspector.inspect({
-      html: '<img src="https://marp.app/assets/marp.svg" />',
-      css: '',
-      slideCount: 1
+      html: ['<img src="https://marp.app/assets/marp.svg" />'],
+      css: ''
     })
 
     await vi.advanceTimersByTimeAsync(31)
@@ -175,13 +176,14 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
     })
 
     const issues = await inspector.inspect({
-      html: `
+      html: [
+        `
         <img src="''" />
         <img src="http://[::1" />
         <img src=" /images/ok.svg " />
-      `,
-      css: `.deck { background-image: url(" "); }`,
-      slideCount: 1
+      `
+      ],
+      css: `.deck { background-image: url(" "); }`
     })
 
     expect(issues).toEqual([])
@@ -223,14 +225,15 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
     })
 
     const issues = await inspector.inspect({
-      html: `
+      html: [
+        `
         <img src="https://marp.app/assets/with-url.svg" />
         <img src="https://marp.app/assets/empty.svg" />
         <img src="https://marp.app/assets/json.svg" />
         <img src="https://marp.app/assets/circular.svg" />
-      `,
-      css: '',
-      slideCount: 1
+      `
+      ],
+      css: ''
     })
 
     expect(issues).toEqual([
@@ -250,13 +253,14 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
     })
 
     const issues = await inspector.inspect({
-      html: `
+      html: [
+        `
         <img src="data:image/svg+xml;base64,AA" />
         <img src="blob:https://slides.local/id" />
         <a href="mailto:test@example.com">Mail</a>
-      `,
-      css: `.deck { background-image: url('javascript:alert(1)'); }`,
-      slideCount: 1
+      `
+      ],
+      css: `.deck { background-image: url('javascript:alert(1)'); }`
     })
 
     expect(issues).toEqual([])
