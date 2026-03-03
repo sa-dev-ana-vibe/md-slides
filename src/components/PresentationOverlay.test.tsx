@@ -42,6 +42,27 @@ function renderOverlay(onExit = vi.fn()) {
   return { onExit }
 }
 
+function getPresentationFrameWindow(): Window {
+  const frame = screen.getByTitle<HTMLIFrameElement>('Slides presentation')
+
+  if (!frame.contentWindow) {
+    throw new Error('Unable to access slides presentation frame window.')
+  }
+
+  return frame.contentWindow
+}
+
+function dispatchOverlayMessage(data: unknown, source?: MessageEventSource | null): void {
+  const resolvedSource = source === undefined ? getPresentationFrameWindow() : source
+
+  window.dispatchEvent(
+    new MessageEvent('message', {
+      data,
+      source: resolvedSource
+    })
+  )
+}
+
 describe('PresentationOverlay', () => {
   afterEach(() => {
     cleanup()
@@ -77,32 +98,24 @@ describe('PresentationOverlay', () => {
     expect(frame.srcdoc).toContain('id="slide-1"')
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'navigate',
-          action: 'next',
-          channelId: 'presentation-7'
-        }
-      })
-    )
+    dispatchOverlayMessage({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'navigate',
+      action: 'next',
+      channelId: 'presentation-7'
+    })
 
     await waitFor(() => {
       expect(frame.srcdoc).toContain('id="slide-2"')
       expect(screen.getByText('2 / 2')).toBeInTheDocument()
     })
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'navigate',
-          action: 'previous',
-          channelId: 'presentation-7'
-        }
-      })
-    )
+    dispatchOverlayMessage({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'navigate',
+      action: 'previous',
+      channelId: 'presentation-7'
+    })
 
     await waitFor(() => {
       expect(frame.srcdoc).toContain('id="slide-1"')
@@ -136,62 +149,46 @@ describe('PresentationOverlay', () => {
 
     const frame = screen.getByTitle<HTMLIFrameElement>('Slides presentation')
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'navigate',
-          action: 'previous',
-          channelId: 'presentation-7'
-        }
-      })
-    )
+    dispatchOverlayMessage({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'navigate',
+      action: 'previous',
+      channelId: 'presentation-7'
+    })
 
     await waitFor(() => {
       expect(frame.srcdoc).toContain('id="slide-1"')
       expect(screen.getByText('1 / 2')).toBeInTheDocument()
     })
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'navigate',
-          action: 'last',
-          channelId: 'presentation-7'
-        }
-      })
-    )
+    dispatchOverlayMessage({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'navigate',
+      action: 'last',
+      channelId: 'presentation-7'
+    })
     await waitFor(() => {
       expect(frame.srcdoc).toContain('id="slide-2"')
       expect(screen.getByText('2 / 2')).toBeInTheDocument()
     })
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'navigate',
-          action: 'next',
-          channelId: 'presentation-7'
-        }
-      })
-    )
+    dispatchOverlayMessage({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'navigate',
+      action: 'next',
+      channelId: 'presentation-7'
+    })
     await waitFor(() => {
       expect(frame.srcdoc).toContain('id="slide-2"')
       expect(screen.getByText('2 / 2')).toBeInTheDocument()
     })
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'navigate',
-          action: 'first',
-          channelId: 'presentation-7'
-        }
-      })
-    )
+    dispatchOverlayMessage({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'navigate',
+      action: 'first',
+      channelId: 'presentation-7'
+    })
     await waitFor(() => {
       expect(frame.srcdoc).toContain('id="slide-1"')
       expect(screen.getByText('1 / 2')).toBeInTheDocument()
@@ -201,15 +198,11 @@ describe('PresentationOverlay', () => {
   it('exits when receiving matching exit message', () => {
     const { onExit } = renderOverlay()
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'exit',
-          channelId: 'presentation-7'
-        }
-      })
-    )
+    dispatchOverlayMessage({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'exit',
+      channelId: 'presentation-7'
+    })
 
     expect(onExit).toHaveBeenCalledTimes(1)
   })
@@ -217,23 +210,30 @@ describe('PresentationOverlay', () => {
   it('ignores non-matching postMessage payloads', () => {
     const { onExit } = renderOverlay()
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'exit',
-          channelId: 'presentation-999'
-        }
-      })
-    )
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: 'other-source',
-          type: 'exit',
-          channelId: 'presentation-7'
-        }
-      })
+    dispatchOverlayMessage({
+      source: PRESENTATION_MESSAGE_SOURCE,
+      type: 'exit',
+      channelId: 'presentation-999'
+    })
+    dispatchOverlayMessage({
+      source: 'other-source',
+      type: 'exit',
+      channelId: 'presentation-7'
+    })
+
+    expect(onExit).not.toHaveBeenCalled()
+  })
+
+  it('ignores postMessage payloads from unexpected message source', () => {
+    const { onExit } = renderOverlay()
+
+    dispatchOverlayMessage(
+      {
+        source: PRESENTATION_MESSAGE_SOURCE,
+        type: 'exit',
+        channelId: 'presentation-7'
+      },
+      window
     )
 
     expect(onExit).not.toHaveBeenCalled()

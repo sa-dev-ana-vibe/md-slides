@@ -38,12 +38,29 @@ describe('buildStandaloneHtml', () => {
         css: ''
       },
       'Deck',
-      { diagnosticsChannelId: 'preview-1' }
+      { diagnosticsChannelId: 'preview-1', scriptNonce: 'testnonce' }
     )
 
+    expect(documentHtml).toContain(`script-src &#39;nonce-testnonce&#39;`)
+    expect(documentHtml).toContain('<script nonce="testnonce">')
     expect(documentHtml).toContain('DIAGNOSTICS_CHANNEL_ID = "preview-1"')
     expect(documentHtml).toContain(`DIAGNOSTICS_SOURCE = "${DIAGNOSTICS_MESSAGE_SOURCE}"`)
     expect(documentHtml).toContain("window.parent.postMessage")
+  })
+
+  it('accepts caller-provided nonce with base64 characters', () => {
+    const scriptNonce = 'nonce+/with/slash=='
+    const documentHtml = buildStandaloneHtml(
+      {
+        html: ['<svg data-marpit-svg="" id="slide"></svg>'],
+        css: ''
+      },
+      'Deck',
+      { diagnosticsChannelId: 'preview-1', scriptNonce }
+    )
+
+    expect(documentHtml).toContain(`script-src &#39;nonce-${scriptNonce}&#39;`)
+    expect(documentHtml).toContain(`<script nonce="${scriptNonce}">`)
   })
 
   it('builds presentation html for single slide and bridge script', () => {
@@ -51,9 +68,11 @@ describe('buildStandaloneHtml', () => {
       '<svg data-marpit-svg="" id="slide-1"></svg>',
       'section { color: white; }',
       'Deck',
-      { channelId: 'presentation-1' }
+      { channelId: 'presentation-1', scriptNonce: 'bridge123' }
     )
 
+    expect(documentHtml).toContain(`script-src &#39;nonce-bridge123&#39;`)
+    expect(documentHtml).toContain('<script nonce="bridge123">')
     expect(documentHtml).toContain('<div class="marpit"><svg data-marpit-svg="" id="slide-1"></svg></div>')
     expect(documentHtml).toContain("type: 'navigate'")
     expect(documentHtml).toContain('PRESENTATION_CHANNEL_ID = "presentation-1"')

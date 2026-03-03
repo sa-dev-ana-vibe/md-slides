@@ -4,10 +4,12 @@ import { PRESENTATION_MESSAGE_SOURCE } from '../presentation/messages'
 
 export interface StandaloneHtmlOptions {
   diagnosticsChannelId?: string
+  scriptNonce?: string
 }
 
 export interface PresentationSlideHtmlOptions {
   channelId: string
+  scriptNonce?: string
 }
 
 function escapeHtml(value: string): string {
@@ -19,11 +21,51 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;')
 }
 
-function buildDiagnosticsScript(diagnosticsChannelId: string): string {
+function generateScriptNonce(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const nonceBytes = new Uint8Array(16)
+    crypto.getRandomValues(nonceBytes)
+    return Array.from(nonceBytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  }
+
+  return `${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`
+}
+
+function normalizeScriptNonce(nonce: string): string {
+  const normalizedNonce = nonce.trim()
+
+  if (normalizedNonce.length === 0) {
+    return generateScriptNonce()
+  }
+
+  if (/^[A-Za-z0-9+/_-]+={0,2}$/.test(normalizedNonce)) {
+    return normalizedNonce
+  }
+
+  return generateScriptNonce()
+}
+
+function buildContentSecurityPolicy(scriptNonce: string): string {
+  return [
+    "default-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "object-src 'none'",
+    "script-src 'nonce-" + scriptNonce + "'",
+    "style-src 'unsafe-inline' https: http:",
+    'img-src data: blob: https: http:',
+    'font-src data: https: http:',
+    'media-src data: blob: https: http:',
+    'frame-src https: http:',
+    'connect-src https: http:'
+  ].join('; ')
+}
+
+function buildDiagnosticsScript(diagnosticsChannelId: string, scriptNonce: string): string {
   const channelLiteral = JSON.stringify(diagnosticsChannelId)
   const sourceLiteral = JSON.stringify(DIAGNOSTICS_MESSAGE_SOURCE)
 
-  return `<script>(() => {
+  return `<script nonce="${escapeHtml(scriptNonce)}">(() => {
     const DIAGNOSTICS_CHANNEL_ID = ${channelLiteral};
     const DIAGNOSTICS_SOURCE = ${sourceLiteral};
     const seenErrors = new Set();
@@ -98,11 +140,11 @@ function buildDiagnosticsScript(diagnosticsChannelId: string): string {
   })();</script>`
 }
 
-function buildPresentationBridgeScript(channelId: string): string {
+function buildPresentationBridgeScript(channelId: string, scriptNonce: string): string {
   const channelLiteral = JSON.stringify(channelId)
   const sourceLiteral = JSON.stringify(PRESENTATION_MESSAGE_SOURCE)
 
-  return `<script>(() => {
+  return `<script nonce="${escapeHtml(scriptNonce)}">(() => {
     const PRESENTATION_CHANNEL_ID = ${channelLiteral};
     const PRESENTATION_SOURCE = ${sourceLiteral};
     const nextKeys = new Set(['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter']);
@@ -209,13 +251,18 @@ export function buildStandaloneHtml(
   title = 'MD Slides',
   options: StandaloneHtmlOptions = {}
 ): string {
-  const diagnosticsScript = options.diagnosticsChannelId ? buildDiagnosticsScript(options.diagnosticsChannelId) : ''
+  const scriptNonce = normalizeScriptNonce(options.scriptNonce ?? generateScriptNonce())
+  const diagnosticsScript = options.diagnosticsChannelId
+    ? buildDiagnosticsScript(options.diagnosticsChannelId, scriptNonce)
+    : ''
+  const contentSecurityPolicy = buildContentSecurityPolicy(scriptNonce)
 
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="${escapeHtml(contentSecurityPolicy)}" />
     <title>${escapeHtml(title)}</title>
     <style>${renderResult.css}</style>
   </head>
@@ -232,13 +279,16 @@ export function buildPresentationSlideHtml(
   title = 'MD Slides',
   options: PresentationSlideHtmlOptions
 ): string {
-  const presentationBridgeScript = buildPresentationBridgeScript(options.channelId)
+  const scriptNonce = normalizeScriptNonce(options.scriptNonce ?? generateScriptNonce())
+  const presentationBridgeScript = buildPresentationBridgeScript(options.channelId, scriptNonce)
+  const contentSecurityPolicy = buildContentSecurityPolicy(scriptNonce)
 
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="${escapeHtml(contentSecurityPolicy)}" />
     <title>${escapeHtml(title)}</title>
     <style>${css}</style>
     <style>

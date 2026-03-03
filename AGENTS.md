@@ -33,7 +33,7 @@ We want to make things convenient, but we don't want to be insecure. Be thoughtf
 ## Test Requirements
 
 - Use `vitest` with `happy-dom` for React/component tests.
-- Before considering any task complete, run `pnpm lint`, `pnpm test`, `pnpm typecheck`, and `pnpm build` in parallel.
+- Before considering any task complete, run `corepack pnpm lint`, `corepack pnpm test`, `corepack pnpm typecheck`, and `corepack pnpm build` in parallel.
 - Keep coverage high: statements/lines/functions >= 95%, branches >= 90%.
 - Avoid global/import mocks whenever possible.
 - Do not mock anything by overriding imports. Use interfaces/dependency injection and inject fakes in tests.

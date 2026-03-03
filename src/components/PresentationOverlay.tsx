@@ -17,6 +17,7 @@ function clampIndex(index: number, maxIndex: number): number {
 export function PresentationOverlay({ slidesHtml, css, channelId, onExit }: PresentationOverlayProps) {
   const { messages } = useI18n()
   const overlayRef = useRef<HTMLDivElement | null>(null)
+  const presentationFrameRef = useRef<HTMLIFrameElement | null>(null)
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0)
   const maxSlideIndex = Math.max(slidesHtml.length - 1, 0)
 
@@ -71,6 +72,12 @@ export function PresentationOverlay({ slidesHtml, css, channelId, onExit }: Pres
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
+      const presentationFrameWindow = presentationFrameRef.current?.contentWindow
+
+      if (!presentationFrameWindow || event.source !== presentationFrameWindow) {
+        return
+      }
+
       const presentationMessage = asPresentationMessage(event.data)
 
       if (!presentationMessage) {
@@ -182,7 +189,13 @@ export function PresentationOverlay({ slidesHtml, css, channelId, onExit }: Pres
           {messages.exitPresentation}
         </button>
       </div>
-      <iframe title={messages.slidesPresentation} srcDoc={iframeDocumentHtml} className="h-full w-full flex-1 border-0 bg-black" sandbox="allow-scripts" />
+      <iframe
+        ref={presentationFrameRef}
+        title={messages.slidesPresentation}
+        srcDoc={iframeDocumentHtml}
+        className="h-full w-full flex-1 border-0 bg-black"
+        sandbox="allow-scripts"
+      />
     </div>
   )
 }

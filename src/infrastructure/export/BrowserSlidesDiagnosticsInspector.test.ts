@@ -166,6 +166,57 @@ describe('BrowserSlidesDiagnosticsInspector', () => {
     ])
   })
 
+  it('reuses cached probe results to avoid duplicate network probes', async () => {
+    const fetchFn = vi.fn(async () => new Response(null, { status: 200 }))
+
+    const inspector = new BrowserSlidesDiagnosticsInspector({
+      fetchFn,
+      cacheTtlMs: 10_000,
+      baseUrl: 'https://slides.local/editor'
+    })
+
+    const renderResult = {
+      html: ['<img src="https://marp.app/assets/marp.svg" />'],
+      css: ''
+    }
+
+    await expect(inspector.inspect(renderResult)).resolves.toEqual([])
+    await expect(inspector.inspect(renderResult)).resolves.toEqual([])
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('supports aborting diagnostics via abort signal', async () => {
+    const fetchFn = vi.fn(
+      async (_input: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'))
+          })
+        })
+    )
+
+    const inspector = new BrowserSlidesDiagnosticsInspector({
+      fetchFn,
+      timeoutMs: 5_000,
+      baseUrl: 'https://slides.local/editor'
+    })
+    const abortController = new AbortController()
+
+    const inspectPromise = inspector.inspect(
+      {
+        html: ['<img src="https://marp.app/assets/marp.svg" />'],
+        css: ''
+      },
+      { signal: abortController.signal }
+    )
+
+    abortController.abort()
+
+    await expect(inspectPromise).rejects.toMatchObject({
+      name: 'AbortError'
+    })
+  })
+
   it('normalizes urls defensively and enforces minimum worker count', async () => {
     const fetchFn = vi.fn(async () => new Response(null, { status: 200 }))
 

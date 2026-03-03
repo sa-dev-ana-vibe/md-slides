@@ -1,4 +1,5 @@
 import { useI18n } from '../i18n/I18nContext'
+import type { Ref } from 'react'
 
 interface PreviewPaneProps {
   documentHtml: string
@@ -6,9 +7,17 @@ interface PreviewPaneProps {
   diagnosticErrors: string[]
   diagnosticsPending: boolean
   errorMessage?: string | null
+  iframeRef?: Ref<HTMLIFrameElement>
 }
 
-export function PreviewPane({ documentHtml, slideCount, diagnosticErrors, diagnosticsPending, errorMessage }: PreviewPaneProps) {
+export function PreviewPane({
+  documentHtml,
+  slideCount,
+  diagnosticErrors,
+  diagnosticsPending,
+  errorMessage,
+  iframeRef
+}: PreviewPaneProps) {
   const { messages } = useI18n()
 
   return (
@@ -46,6 +55,7 @@ export function PreviewPane({ documentHtml, slideCount, diagnosticErrors, diagno
             </div>
           )}
           <iframe
+            ref={iframeRef}
             title={messages.slidesPreview}
             srcDoc={documentHtml}
             className="h-[420px] w-full flex-1 bg-slate-100"

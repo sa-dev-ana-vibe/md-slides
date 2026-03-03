@@ -30,6 +30,16 @@ function getPreviewDiagnosticsChannelId(): string {
   return JSON.parse(match[1]) as string
 }
 
+function getPreviewFrameWindow(): Window {
+  const previewFrame = screen.getByTitle<HTMLIFrameElement>('Slides preview')
+
+  if (!previewFrame.contentWindow) {
+    throw new Error('Unable to access slides preview frame window.')
+  }
+
+  return previewFrame.contentWindow
+}
+
 function getPresentationChannelId(): string {
   const presentationFrame = screen.getByTitle<HTMLIFrameElement>('Slides presentation')
   const match = presentationFrame.srcdoc.match(/PRESENTATION_CHANNEL_ID = ([^;]+);/)
@@ -39,6 +49,25 @@ function getPresentationChannelId(): string {
   }
 
   return JSON.parse(match[1]) as string
+}
+
+function getPresentationFrameWindow(): Window {
+  const presentationFrame = screen.getByTitle<HTMLIFrameElement>('Slides presentation')
+
+  if (!presentationFrame.contentWindow) {
+    throw new Error('Unable to access slides presentation frame window.')
+  }
+
+  return presentationFrame.contentWindow
+}
+
+function dispatchWindowMessage(data: unknown, source?: MessageEventSource | null): void {
+  window.dispatchEvent(
+    new MessageEvent('message', {
+      data,
+      source: source ?? null
+    })
+  )
 }
 
 function createDeferred<T>() {
@@ -279,30 +308,29 @@ describe('App', () => {
     expect(screen.getByTitle<HTMLIFrameElement>('Slides presentation').srcdoc).toContain('id="slide-1"')
 
     const presentationChannelId = getPresentationChannelId()
+    const presentationFrameWindow = getPresentationFrameWindow()
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'navigate',
-          action: 'next',
-          channelId: presentationChannelId
-        }
-      })
+    dispatchWindowMessage(
+      {
+        source: PRESENTATION_MESSAGE_SOURCE,
+        type: 'navigate',
+        action: 'next',
+        channelId: presentationChannelId
+      },
+      presentationFrameWindow
     )
 
     await waitFor(() => {
       expect(screen.getByTitle<HTMLIFrameElement>('Slides presentation').srcdoc).toContain('id="slide-2"')
     })
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'exit',
-          channelId: presentationChannelId
-        }
-      })
+    dispatchWindowMessage(
+      {
+        source: PRESENTATION_MESSAGE_SOURCE,
+        type: 'exit',
+        channelId: presentationChannelId
+      },
+      getPresentationFrameWindow()
     )
 
     await waitFor(() => {
@@ -325,24 +353,23 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Present' }))
 
     const presentationChannelId = getPresentationChannelId()
+    const presentationFrameWindow = getPresentationFrameWindow()
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: PRESENTATION_MESSAGE_SOURCE,
-          type: 'exit',
-          channelId: `${presentationChannelId}-other`
-        }
-      })
+    dispatchWindowMessage(
+      {
+        source: PRESENTATION_MESSAGE_SOURCE,
+        type: 'exit',
+        channelId: `${presentationChannelId}-other`
+      },
+      presentationFrameWindow
     )
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: 'other-source',
-          type: 'exit',
-          channelId: presentationChannelId
-        }
-      })
+    dispatchWindowMessage(
+      {
+        source: 'other-source',
+        type: 'exit',
+        channelId: presentationChannelId
+      },
+      presentationFrameWindow
     )
 
     expect(screen.getByRole('dialog', { name: 'Presentation mode' })).toBeInTheDocument()
@@ -527,6 +554,32 @@ describe('App', () => {
     expect(screen.getByTestId('app-markdown-input')).toHaveValue('# replacement')
   })
 
+  it('uses latest markdown state for confirmation after async import resolves', async () => {
+    const pickAndReadDeferred = createDeferred<string | null>()
+    const confirm = { confirm: vi.fn(() => false) }
+    const { services } = createFakeServices({
+      importer: {
+        pickAndRead: vi.fn(() => pickAndReadDeferred.promise),
+        readDropped: vi.fn(async () => '# dropped')
+      },
+      confirm
+    })
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Open .md' }))
+    await user.type(screen.getByTestId('app-markdown-input'), '# now filled while picker pending')
+
+    pickAndReadDeferred.resolve('# replacement')
+
+    await waitFor(() => {
+      expect(confirm.confirm).toHaveBeenCalledTimes(1)
+    })
+
+    expect(screen.getByTestId('app-markdown-input')).toHaveValue('# now filled while picker pending')
+  })
+
   it('imports dropped markdown file', async () => {
     const readDropped = vi.fn(async () => '# from drop')
     const { services } = createFakeServices({
@@ -595,6 +648,7 @@ describe('App', () => {
     await user.type(screen.getByTestId('app-markdown-input'), '# slide')
 
     const previewChannelId = getPreviewDiagnosticsChannelId()
+    const previewFrameWindow = getPreviewFrameWindow()
 
     const diagnosticsMessage = 'GET https://marp.app/assets/marp.svg net::ERR_CONNECTION_CLOSED'
     const diagnosticsEvent = new MessageEvent('message', {
@@ -603,7 +657,8 @@ describe('App', () => {
         channelId: previewChannelId,
         type: 'error',
         message: diagnosticsMessage
-      }
+      },
+      source: previewFrameWindow
     })
 
     window.dispatchEvent(diagnosticsEvent)
@@ -623,7 +678,7 @@ describe('App', () => {
     expect(pdfExport).not.toHaveBeenCalled()
   })
 
-  it('ignores invalid diagnostics message payloads', async () => {
+  it('ignores diagnostics messages from unexpected message source', async () => {
     const { services } = createFakeServices()
 
     renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
@@ -633,15 +688,41 @@ describe('App', () => {
 
     const previewChannelId = getPreviewDiagnosticsChannelId()
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: 'another-source',
-          channelId: previewChannelId,
-          type: 'error',
-          message: 'ignored'
-        }
-      })
+    dispatchWindowMessage(
+      {
+        source: DIAGNOSTICS_MESSAGE_SOURCE,
+        channelId: previewChannelId,
+        type: 'error',
+        message: 'forged-source'
+      },
+      window
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText('forged-source')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
+    })
+  })
+
+  it('ignores invalid diagnostics message payloads', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+
+    const previewChannelId = getPreviewDiagnosticsChannelId()
+    const previewFrameWindow = getPreviewFrameWindow()
+
+    dispatchWindowMessage(
+      {
+        source: 'another-source',
+        channelId: previewChannelId,
+        type: 'error',
+        message: 'ignored'
+      },
+      previewFrameWindow
     )
 
     await waitFor(() => {
@@ -663,17 +744,17 @@ describe('App', () => {
     await user.type(screen.getByTestId('app-markdown-input'), '\n# two')
 
     const currentChannelId = getPreviewDiagnosticsChannelId()
+    const previewFrameWindow = getPreviewFrameWindow()
     expect(currentChannelId).not.toBe(oldChannelId)
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          source: DIAGNOSTICS_MESSAGE_SOURCE,
-          channelId: oldChannelId,
-          type: 'error',
-          message: 'stale error'
-        }
-      })
+    dispatchWindowMessage(
+      {
+        source: DIAGNOSTICS_MESSAGE_SOURCE,
+        channelId: oldChannelId,
+        type: 'error',
+        message: 'stale error'
+      },
+      previewFrameWindow
     )
 
     await waitFor(() => {

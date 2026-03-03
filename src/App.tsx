@@ -43,6 +43,10 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
 function writeTextToClipboard(text: string): Promise<void> {
   const clipboard = (navigator as unknown as { clipboard?: Clipboard }).clipboard
 
@@ -104,6 +108,8 @@ export default function App({
 
   const markdownRef = useRef(markdown)
   const diagnosticsRunIdRef = useRef(0)
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null)
+  const previewDiagnosticsAbortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     markdownRef.current = markdown
@@ -115,6 +121,12 @@ export default function App({
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
+      const previewFrameWindow = previewFrameRef.current?.contentWindow
+
+      if (!previewFrameWindow || event.source !== previewFrameWindow) {
+        return
+      }
+
       const diagnosticsMessage = asDiagnosticsMessage(event.data)
 
       if (!diagnosticsMessage) {
@@ -141,18 +153,27 @@ export default function App({
     }
   }, [previewDiagnosticsChannelId])
 
+  const abortPreviewDiagnostics = useCallback(() => {
+    previewDiagnosticsAbortControllerRef.current?.abort()
+    previewDiagnosticsAbortControllerRef.current = null
+  }, [])
+
   const clearPreviewDiagnostics = useCallback(() => {
     diagnosticsRunIdRef.current += 1
+    abortPreviewDiagnostics()
     setPassivePreviewDiagnosticErrors([])
     setActivePreviewDiagnosticErrors([])
     setPreviewDiagnosticsPending(false)
     setPreviewDiagnosticsChannelId(createDiagnosticsChannelId('preview'))
-  }, [])
+  }, [abortPreviewDiagnostics])
 
   const startPreviewDiagnostics = useCallback(
     (nextRenderResult: RenderResult) => {
       const diagnosticsRunId = diagnosticsRunIdRef.current + 1
       diagnosticsRunIdRef.current = diagnosticsRunId
+      abortPreviewDiagnostics()
+      const abortController = new AbortController()
+      previewDiagnosticsAbortControllerRef.current = abortController
 
       setPassivePreviewDiagnosticErrors([])
       setActivePreviewDiagnosticErrors([])
@@ -160,7 +181,7 @@ export default function App({
       setPreviewDiagnosticsChannelId(createDiagnosticsChannelId('preview'))
 
       void services.diagnosticsInspector
-        .inspect(nextRenderResult)
+        .inspect(nextRenderResult, { signal: abortController.signal })
         .then((issues) => {
           if (diagnosticsRunIdRef.current !== diagnosticsRunId) {
             return
@@ -175,12 +196,27 @@ export default function App({
             return
           }
 
+          if (abortController.signal.aborted || isAbortError(error)) {
+            return
+          }
+
           setActivePreviewDiagnosticErrors([toErrorMessage(error, messages.unknownError)])
           setPreviewDiagnosticsPending(false)
         })
+        .finally(() => {
+          if (previewDiagnosticsAbortControllerRef.current === abortController) {
+            previewDiagnosticsAbortControllerRef.current = null
+          }
+        })
     },
-    [messages.unknownError, services.diagnosticsInspector]
+    [abortPreviewDiagnostics, messages.unknownError, services.diagnosticsInspector]
   )
+
+  useEffect(() => {
+    return () => {
+      abortPreviewDiagnostics()
+    }
+  }, [abortPreviewDiagnostics])
 
   useEffect(() => {
     if (markdown.trim().length === 0) {
@@ -244,7 +280,7 @@ export default function App({
 
   const replaceMarkdownWithConfirmation = useCallback(
     (nextMarkdown: string): boolean => {
-      if (markdown.trim().length > 0) {
+      if (markdownRef.current.trim().length > 0) {
         const confirmed = services.confirm.confirm(messages.replaceMarkdownConfirm)
 
         if (!confirmed) {
@@ -255,7 +291,7 @@ export default function App({
       setMarkdown(nextMarkdown)
       return true
     },
-    [markdown, messages.replaceMarkdownConfirm, services.confirm]
+    [messages.replaceMarkdownConfirm, services.confirm]
   )
 
   const handleOpenMarkdown = useCallback(async () => {
@@ -445,6 +481,7 @@ export default function App({
             diagnosticErrors={previewDiagnosticErrors}
             diagnosticsPending={previewDiagnosticsPending}
             errorMessage={renderError}
+            iframeRef={previewFrameRef}
           />
         </div>
       </main>

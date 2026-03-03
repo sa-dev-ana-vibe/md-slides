@@ -12,8 +12,12 @@ export interface PdfExporter {
   export(markdown: string): Promise<void>
 }
 
+export interface SlidesDiagnosticsInspectOptions {
+  signal?: AbortSignal
+}
+
 export interface SlidesDiagnosticsInspector {
-  inspect(renderResult: RenderResult): Promise<string[]>
+  inspect(renderResult: RenderResult, options?: SlidesDiagnosticsInspectOptions): Promise<string[]>
 }
 
 export interface MarkdownFileImporter {
