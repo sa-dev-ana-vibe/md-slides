@@ -10,6 +10,7 @@ import { LanguagePicker } from './components/LanguagePicker'
 import { PresentationOverlay } from './components/PresentationOverlay'
 import type { ExportFormat, RenderResult } from './domain/types'
 import { buildStandaloneHtml } from './infrastructure/export/buildStandaloneHtml'
+import { buildHtmlExportFileName } from './infrastructure/export/buildHtmlExportFileName'
 import { asDiagnosticsMessage, createDiagnosticsChannelId } from './infrastructure/export/diagnostics'
 import { getBuiltInThemeNames, mergeThemeNames } from './infrastructure/marp/themeNames'
 import {
@@ -86,6 +87,7 @@ export default function App({
   const { messages } = useI18n()
   const [markdown, setMarkdown] = useState('')
   const [busyAction, setBusyAction] = useState<ExportFormat | 'open' | null>(null)
+  const [sourceFileName, setSourceFileName] = useState<string | null>(null)
   const [isAskAiOpen, setIsAskAiOpen] = useState(false)
   const [askAiBrief, setAskAiBrief] = useState('')
   const [askAiThemeName, setAskAiThemeName] = useState('default')
@@ -279,7 +281,7 @@ export default function App({
       : undefined
 
   const replaceMarkdownWithConfirmation = useCallback(
-    (nextMarkdown: string): boolean => {
+    (nextMarkdown: string, nextSourceFileName: string | null): boolean => {
       if (markdownRef.current.trim().length > 0) {
         const confirmed = services.confirm.confirm(messages.replaceMarkdownConfirm)
 
@@ -289,23 +291,32 @@ export default function App({
       }
 
       setMarkdown(nextMarkdown)
+      setSourceFileName(nextMarkdown.trim().length > 0 ? nextSourceFileName : null)
       return true
     },
     [messages.replaceMarkdownConfirm, services.confirm]
   )
+
+  const handleMarkdownChange = useCallback((nextMarkdown: string) => {
+    setMarkdown(nextMarkdown)
+
+    if (nextMarkdown.trim().length === 0) {
+      setSourceFileName(null)
+    }
+  }, [])
 
   const handleOpenMarkdown = useCallback(async () => {
     setActionError(null)
     setBusyAction('open')
 
     try {
-      const nextMarkdown = await services.importer.pickAndRead()
+      const importedFile = await services.importer.pickAndRead()
 
-      if (nextMarkdown === null) {
+      if (importedFile === null) {
         return
       }
 
-      replaceMarkdownWithConfirmation(nextMarkdown)
+      replaceMarkdownWithConfirmation(importedFile.markdown, importedFile.fileName)
     } catch (error) {
       setActionError(messages.failedToOpenMarkdownFile(toErrorMessage(error, messages.unknownError)))
     } finally {
@@ -338,7 +349,7 @@ export default function App({
 
       try {
         const nextMarkdown = await services.importer.readDropped(file)
-        replaceMarkdownWithConfirmation(nextMarkdown)
+        replaceMarkdownWithConfirmation(nextMarkdown, file.name)
       } catch (error) {
         setActionError(messages.failedToReadDroppedFile(toErrorMessage(error, messages.unknownError)))
       }
@@ -461,7 +472,8 @@ export default function App({
           }}
           onEnterPresentation={handleEnterPresentation}
           onExportHtml={() => {
-            void runExport('html', () => services.htmlExporter.export(markdown))
+            const fileName = buildHtmlExportFileName({ markdown, sourceFileName })
+            void runExport('html', () => services.htmlExporter.export(markdown, fileName))
           }}
           onExportPdf={() => {
             void runExport('pdf', () => services.pdfExporter.export(markdown))
@@ -472,7 +484,7 @@ export default function App({
 
         <div className="grid flex-1 gap-4 lg:grid-cols-2">
           <DropZone onMarkdownFileDrop={handleDropMarkdownFile}>
-            <MarkdownEditorPane value={markdown} onChange={setMarkdown} EditorComponent={editorComponent} />
+            <MarkdownEditorPane value={markdown} onChange={handleMarkdownChange} EditorComponent={editorComponent} />
           </DropZone>
 
           <PreviewPane

@@ -35,7 +35,10 @@ describe('BrowserMarkdownFileImporter', () => {
 
     const importer = new BrowserMarkdownFileImporter({ createInput: () => input })
 
-    await expect(importer.pickAndRead()).resolves.toBe('# imported')
+    await expect(importer.pickAndRead()).resolves.toEqual({
+      markdown: '# imported',
+      fileName: 'deck.md'
+    })
     expect(input.type).toBe('file')
     expect(input.accept).toContain('.md')
   })
@@ -96,7 +99,10 @@ describe('BrowserMarkdownFileImporter', () => {
     })
 
     const importer = new BrowserMarkdownFileImporter()
-    await expect(importer.pickAndRead()).resolves.toBe('# default')
+    await expect(importer.pickAndRead()).resolves.toEqual({
+      markdown: '# default',
+      fileName: 'deck.md'
+    })
     expect(createElementSpy).toHaveBeenCalledWith('input')
     createElementSpy.mockRestore()
   })

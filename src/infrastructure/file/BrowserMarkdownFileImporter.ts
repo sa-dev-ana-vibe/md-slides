@@ -19,7 +19,7 @@ export class BrowserMarkdownFileImporter implements MarkdownFileImporter {
     this.createInput = createInput
   }
 
-  pickAndRead(): Promise<string | null> {
+  pickAndRead(): Promise<{ markdown: string; fileName: string } | null> {
     const input = this.createInput()
     input.type = 'file'
     input.accept = '.md,.markdown,text/markdown,text/plain'
@@ -35,7 +35,12 @@ export class BrowserMarkdownFileImporter implements MarkdownFileImporter {
             return
           }
 
-          void file.text().then(resolve, reject)
+          void file.text().then(
+            (markdown) => {
+              resolve({ markdown, fileName: file.name })
+            },
+            reject
+          )
         },
         { once: true }
       )

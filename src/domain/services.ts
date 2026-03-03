@@ -21,7 +21,7 @@ export interface SlidesDiagnosticsInspector {
 }
 
 export interface MarkdownFileImporter {
-  pickAndRead(): Promise<string | null>
+  pickAndRead(): Promise<{ markdown: string; fileName: string } | null>
   readDropped(file: File): Promise<string>
 }
 

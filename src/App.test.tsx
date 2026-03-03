@@ -495,7 +495,7 @@ describe('App', () => {
   })
 
   it('opens markdown file and replaces editor content', async () => {
-    const pickAndRead = vi.fn(async () => '# imported')
+    const pickAndRead = vi.fn(async () => ({ markdown: '# imported', fileName: 'imported.md' }))
     const { services } = createFakeServices({
       importer: {
         pickAndRead,
@@ -531,7 +531,7 @@ describe('App', () => {
   })
 
   it('asks for confirmation before replacing existing markdown', async () => {
-    const pickAndRead = vi.fn(async () => '# replacement')
+    const pickAndRead = vi.fn(async () => ({ markdown: '# replacement', fileName: 'replacement.md' }))
     const confirm = { confirm: vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true) }
     const { services } = createFakeServices({
       importer: {
@@ -555,7 +555,7 @@ describe('App', () => {
   })
 
   it('uses latest markdown state for confirmation after async import resolves', async () => {
-    const pickAndReadDeferred = createDeferred<string | null>()
+    const pickAndReadDeferred = createDeferred<{ markdown: string; fileName: string } | null>()
     const confirm = { confirm: vi.fn(() => false) }
     const { services } = createFakeServices({
       importer: {
@@ -571,7 +571,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Open .md' }))
     await user.type(screen.getByTestId('app-markdown-input'), '# now filled while picker pending')
 
-    pickAndReadDeferred.resolve('# replacement')
+    pickAndReadDeferred.resolve({ markdown: '# replacement', fileName: 'replacement.md' })
 
     await waitFor(() => {
       expect(confirm.confirm).toHaveBeenCalledTimes(1)
@@ -601,6 +601,30 @@ describe('App', () => {
     })
 
     expect(screen.getByTestId('app-markdown-input')).toHaveValue('# from drop')
+  })
+
+  it('uses imported source file name for html export after markdown edits', async () => {
+    const htmlExport = vi.fn()
+    const { services } = createFakeServices({
+      htmlExporter: { export: htmlExport },
+      importer: {
+        pickAndRead: vi.fn(async () => ({ markdown: '# Imported heading', fileName: 'roadmap-v2.md' })),
+        readDropped: vi.fn(async () => '# dropped')
+      }
+    })
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Open .md' }))
+    await user.type(screen.getByTestId('app-markdown-input'), '\n# Updated heading')
+
+    await user.click(screen.getByRole('button', { name: 'Export HTML' }))
+
+    expect(htmlExport).toHaveBeenCalledWith(
+      '# Imported heading\n# Updated heading',
+      expect.stringMatching(/^roadmap-v2-\d{8}-\d{6}\.html$/)
+    )
   })
 
   it('surfaces importer errors with unknown error fallback', async () => {
@@ -674,7 +698,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Export HTML' })).toBeEnabled()
 
     await user.click(screen.getByRole('button', { name: 'Export HTML' }))
-    expect(htmlExport).toHaveBeenCalledWith('# slide')
+    expect(htmlExport).toHaveBeenCalledWith('# slide', expect.stringMatching(/^slide-\d{8}-\d{6}\.html$/))
     expect(pdfExport).not.toHaveBeenCalled()
   })
 
@@ -784,7 +808,7 @@ describe('App', () => {
     })
 
     await user.click(screen.getByRole('button', { name: 'Export HTML' }))
-    expect(htmlExport).toHaveBeenCalledWith('# slide')
+    expect(htmlExport).toHaveBeenCalledWith('# slide', expect.stringMatching(/^slide-\d{8}-\d{6}\.html$/))
 
     await user.click(screen.getByRole('button', { name: 'Export PDF' }))
     await waitFor(() => {
