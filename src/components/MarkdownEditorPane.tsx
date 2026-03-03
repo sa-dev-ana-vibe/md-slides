@@ -9,6 +9,7 @@ export interface MarkdownEditorAdapterProps {
 }
 
 export type MarkdownEditorComponent = (props: MarkdownEditorAdapterProps) => ReactElement
+const MARKDOWN_EXTENSIONS = [markdown()]
 
 export function CodeMirrorMarkdownEditor({ value, onChange }: MarkdownEditorAdapterProps) {
   const { messages } = useI18n()
@@ -16,7 +17,7 @@ export function CodeMirrorMarkdownEditor({ value, onChange }: MarkdownEditorAdap
   return (
     <CodeMirror
       value={value}
-      extensions={[markdown()]}
+      extensions={MARKDOWN_EXTENSIONS}
       height="100%"
       onChange={onChange}
       placeholder={messages.markdownPlaceholder}
