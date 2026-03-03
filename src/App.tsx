@@ -100,7 +100,6 @@ export default function App({
   const [isAskAiOpen, setIsAskAiOpen] = useState(false)
   const [askAiBrief, setAskAiBrief] = useState('')
   const [askAiThemeName, setAskAiThemeName] = useState('default')
-  const [askAiIncludePresenterNotes, setAskAiIncludePresenterNotes] = useState(false)
   const [askAiTargetSlideCount, setAskAiTargetSlideCount] = useState<TargetSlideVibe>('medium')
   const [askAiSizePreset, setAskAiSizePreset] = useState<SizePreset>('')
   const [previewThemeOverride, setPreviewThemeOverride] = useState<string | null>(null)
@@ -432,7 +431,6 @@ export default function App({
     setActionError(null)
     setAskAiBrief('')
     setAskAiThemeName(previewThemeName)
-    setAskAiIncludePresenterNotes(false)
     setAskAiTargetSlideCount('medium')
     setAskAiSizePreset(previewSizePreset)
     setIsAskAiOpen(true)
@@ -447,13 +445,12 @@ export default function App({
       buildAskAiFullPrompt(
         {
           themeName: askAiThemeName,
-          includePresenterNotes: askAiIncludePresenterNotes,
           targetSlideCount: askAiTargetSlideCount,
           sizePreset: askAiSizePreset
         },
         askAiBrief
       ),
-    [askAiBrief, askAiIncludePresenterNotes, askAiSizePreset, askAiTargetSlideCount, askAiThemeName]
+    [askAiBrief, askAiSizePreset, askAiTargetSlideCount, askAiThemeName]
   )
 
   const handleCopyAskAiPrompt = useCallback(async () => {
@@ -587,12 +584,10 @@ export default function App({
           themeNames={availableThemeNames}
           userBrief={askAiBrief}
           themeName={askAiThemeName}
-          includePresenterNotes={askAiIncludePresenterNotes}
           targetSlideCount={askAiTargetSlideCount}
           sizePreset={askAiSizePreset}
           onUserBriefChange={setAskAiBrief}
           onThemeNameChange={setAskAiThemeName}
-          onIncludePresenterNotesChange={setAskAiIncludePresenterNotes}
           onTargetSlideCountChange={setAskAiTargetSlideCount}
           onSizePresetChange={setAskAiSizePreset}
           onClose={handleCloseAskAi}

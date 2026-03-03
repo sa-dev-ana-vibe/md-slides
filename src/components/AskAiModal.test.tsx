@@ -9,12 +9,10 @@ function renderModal(overrides: Partial<ComponentProps<typeof AskAiModal>> = {})
     themeNames: ['default', 'gaia', 'uncover'],
     userBrief: 'Current brief',
     themeName: 'default',
-    includePresenterNotes: false,
     targetSlideCount: 'medium',
     sizePreset: '',
     onUserBriefChange: vi.fn(),
     onThemeNameChange: vi.fn(),
-    onIncludePresenterNotesChange: vi.fn(),
     onTargetSlideCountChange: vi.fn(),
     onSizePresetChange: vi.fn(),
     onClose: vi.fn(),
@@ -41,9 +39,6 @@ describe('AskAiModal', () => {
 
     await user.selectOptions(screen.getByLabelText('Theme'), 'gaia')
     expect(props.onThemeNameChange).toHaveBeenCalledWith('gaia')
-
-    await user.click(screen.getByRole('checkbox', { name: 'Include presenter notes' }))
-    expect(props.onIncludePresenterNotesChange).toHaveBeenCalledWith(true)
 
     await user.selectOptions(screen.getByLabelText('Target slide count'), 'large')
     expect(props.onTargetSlideCountChange).toHaveBeenCalledWith('large')

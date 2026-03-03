@@ -3,7 +3,6 @@ export type SizePreset = '' | '16:9' | '4:3'
 
 export interface AskAiPromptVariables {
   themeName: string
-  includePresenterNotes: boolean
   targetSlideCount: TargetSlideVibe
   sizePreset: SizePreset
 }
@@ -12,7 +11,6 @@ export const ASK_AI_SYSTEM_PROMPT_TEMPLATE = `You are a Marp Markdown presentati
 
 VARIABLES
 - themeName = "{{THEME_NAME}}"
-- includePresenterNotes = {{INCLUDE_PRESENTER_NOTES}}   # true | false
 - targetSlideCount = "{{TARGET_SLIDE_COUNT}}"            # blank => choose appropriately
 - sizePreset = "{{SIZE_PRESET}}"                         # blank => omit \`size\`
 
@@ -39,11 +37,6 @@ Images:
   Background: ![bg](url)  ![bg right:40%](url)  ![bg left](url)
 Auto-fit heading: # <!-- fit --> Long title text
 
-PRESENTER NOTES
-If \`includePresenterNotes\` is true, add concise speaker notes as plain HTML comments (not directives, not key:value).
-  <!-- Pause here and stress the contrast between old and new workflow. -->
-If false, omit all non-directive comments.
-
 CONTENT RULES
 - One main idea per slide. Split crowded content.
 - Respect \`targetSlideCount\` when provided.
@@ -56,7 +49,6 @@ CONTENT RULES
 function fillTemplateVariables(template: string, variables: AskAiPromptVariables): string {
   return template
     .replaceAll('{{THEME_NAME}}', variables.themeName)
-    .replaceAll('{{INCLUDE_PRESENTER_NOTES}}', String(variables.includePresenterNotes))
     .replaceAll('{{TARGET_SLIDE_COUNT}}', variables.targetSlideCount)
     .replaceAll('{{SIZE_PRESET}}', variables.sizePreset)
 }

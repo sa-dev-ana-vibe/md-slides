@@ -144,7 +144,6 @@ describe('App', () => {
     expect(getAskAiDialog()).toBeInTheDocument()
     expect(dialog.getByLabelText('Presentation brief')).toHaveValue('')
     expect(dialog.getByLabelText('Theme')).toHaveValue('default')
-    expect(dialog.getByRole('checkbox', { name: 'Include presenter notes' })).not.toBeChecked()
     expect(dialog.getByLabelText('Target slide count')).toHaveValue('medium')
     expect(dialog.getByLabelText('Size preset')).toHaveValue('')
   })
@@ -165,7 +164,6 @@ describe('App', () => {
     const dialog = within(getAskAiDialog())
     await user.type(dialog.getByLabelText('Presentation brief'), 'Create slides about product launch plan')
     await user.selectOptions(dialog.getByLabelText('Theme'), 'gaia')
-    await user.click(dialog.getByRole('checkbox', { name: 'Include presenter notes' }))
     await user.selectOptions(dialog.getByLabelText('Target slide count'), 'large')
     await user.selectOptions(dialog.getByLabelText('Size preset'), '4:3')
     await user.click(dialog.getByRole('button', { name: 'Copy Prompt' }))
@@ -177,7 +175,6 @@ describe('App', () => {
     const prompt = clipboardWriter.writeText.mock.calls[0][0] as string
 
     expect(prompt).toContain('- themeName = "gaia"')
-    expect(prompt).toContain('- includePresenterNotes = true')
     expect(prompt).toContain('- targetSlideCount = "large"')
     expect(prompt).toContain('- sizePreset = "4:3"')
     expect(prompt).toContain('theme: "gaia"')

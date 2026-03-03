@@ -8,7 +8,6 @@ import {
 
 const VARIABLES: AskAiPromptVariables = {
   themeName: 'gaia',
-  includePresenterNotes: true,
   targetSlideCount: 'large',
   sizePreset: '16:9'
 }
@@ -18,7 +17,6 @@ describe('buildAskAiPrompt', () => {
     const prompt = buildAskAiFullPrompt(VARIABLES, 'Build a launch demo deck')
 
     expect(prompt).toContain('- themeName = "gaia"')
-    expect(prompt).toContain('- includePresenterNotes = true')
     expect(prompt).toContain('- targetSlideCount = "large"')
     expect(prompt).toContain('- sizePreset = "16:9"')
     expect(prompt).toContain('theme: "gaia"')
@@ -30,13 +28,11 @@ describe('buildAskAiPrompt', () => {
       {
         ...VARIABLES,
         sizePreset: '',
-        includePresenterNotes: false,
         targetSlideCount: 'small'
       },
       '  Keep it under 6 slides.  '
     )
 
-    expect(prompt).toContain('- includePresenterNotes = false')
     expect(prompt).toContain('- targetSlideCount = "small"')
     expect(prompt).toContain('- sizePreset = ""')
     expect(prompt).toContain('USER_BRIEF:\nKeep it under 6 slides.')

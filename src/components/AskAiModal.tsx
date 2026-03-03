@@ -6,12 +6,10 @@ interface AskAiModalProps {
   themeNames: readonly string[]
   userBrief: string
   themeName: string
-  includePresenterNotes: boolean
   targetSlideCount: TargetSlideVibe
   sizePreset: SizePreset
   onUserBriefChange: (value: string) => void
   onThemeNameChange: (value: string) => void
-  onIncludePresenterNotesChange: (value: boolean) => void
   onTargetSlideCountChange: (value: TargetSlideVibe) => void
   onSizePresetChange: (value: SizePreset) => void
   onClose: () => void
@@ -23,12 +21,10 @@ export function AskAiModal({
   themeNames,
   userBrief,
   themeName,
-  includePresenterNotes,
   targetSlideCount,
   sizePreset,
   onUserBriefChange,
   onThemeNameChange,
-  onIncludePresenterNotesChange,
   onTargetSlideCountChange,
   onSizePresetChange,
   onClose,
@@ -101,15 +97,6 @@ export function AskAiModal({
                   </option>
                 ))}
               </select>
-            </label>
-
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={includePresenterNotes}
-                onChange={(event) => onIncludePresenterNotesChange(event.target.checked)}
-              />
-              <span>{messages.askAiIncludePresenterNotesLabel}</span>
             </label>
 
             <label className="flex flex-col gap-1 text-sm text-slate-700">
