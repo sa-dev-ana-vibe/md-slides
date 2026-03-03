@@ -28,6 +28,18 @@ const EMPTY_RENDER_RESULT: RenderResult = {
   css: ''
 }
 
+interface PreviewDiagnosticsState {
+  markdownSnapshot: string | null
+  pending: boolean
+  errors: string[]
+}
+
+const EMPTY_PREVIEW_DIAGNOSTICS_STATE: PreviewDiagnosticsState = {
+  markdownSnapshot: null,
+  pending: false,
+  errors: []
+}
+
 export const RENDER_DEBOUNCE_MS = 150
 export const CHAT_GPT_PROMPT_BASE_URL = 'https://chatgpt.com/?prompt='
 
@@ -47,6 +59,20 @@ function toErrorMessage(error: unknown, fallback: string): string {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
+}
+
+function normalizeDiagnosticsIssues(issues: readonly string[]): string[] {
+  return Array.from(new Set(issues.map((issue) => issue.trim()).filter((issue) => issue.length > 0)))
+}
+
+function appendUniqueDiagnosticIssue(currentIssues: string[], nextIssue: string): string[] {
+  const normalizedIssue = nextIssue.trim()
+
+  if (normalizedIssue.length === 0 || currentIssues.includes(normalizedIssue)) {
+    return currentIssues
+  }
+
+  return [...currentIssues, normalizedIssue]
 }
 
 function toKnownSizePreset(sizePreset: string | undefined): SizePreset {
@@ -107,9 +133,7 @@ export default function App({
   const [renderResult, setRenderResult] = useState<RenderResult>(EMPTY_RENDER_RESULT)
   const [renderError, setRenderError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [passivePreviewDiagnosticErrors, setPassivePreviewDiagnosticErrors] = useState<string[]>([])
-  const [activePreviewDiagnosticErrors, setActivePreviewDiagnosticErrors] = useState<string[]>([])
-  const [previewDiagnosticsPending, setPreviewDiagnosticsPending] = useState(false)
+  const [previewDiagnostics, setPreviewDiagnostics] = useState<PreviewDiagnosticsState>(EMPTY_PREVIEW_DIAGNOSTICS_STATE)
   const [previewDiagnosticsChannelId, setPreviewDiagnosticsChannelId] = useState(() =>
     createDiagnosticsChannelId('preview')
   )
@@ -119,8 +143,8 @@ export default function App({
   )
 
   const markdownRef = useRef(markdown)
-  const diagnosticsRunIdRef = useRef(0)
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null)
+  const previewDiagnosticsChannelIdRef = useRef(previewDiagnosticsChannelId)
   const previewDiagnosticsAbortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -130,6 +154,10 @@ export default function App({
   useEffect(() => {
     return services.beforeUnload.attach(() => markdownRef.current.trim().length > 0)
   }, [services.beforeUnload])
+
+  useEffect(() => {
+    previewDiagnosticsChannelIdRef.current = previewDiagnosticsChannelId
+  }, [previewDiagnosticsChannelId])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
@@ -145,16 +173,21 @@ export default function App({
         return
       }
 
-      if (diagnosticsMessage.channelId !== previewDiagnosticsChannelId) {
+      if (diagnosticsMessage.channelId !== previewDiagnosticsChannelIdRef.current) {
         return
       }
 
-      setPassivePreviewDiagnosticErrors((currentErrors) => {
-        if (currentErrors.includes(diagnosticsMessage.message)) {
-          return currentErrors
+      setPreviewDiagnostics((currentDiagnostics) => {
+        const nextErrors = appendUniqueDiagnosticIssue(currentDiagnostics.errors, diagnosticsMessage.message)
+
+        if (nextErrors === currentDiagnostics.errors) {
+          return currentDiagnostics
         }
 
-        return [...currentErrors, diagnosticsMessage.message]
+        return {
+          ...currentDiagnostics,
+          errors: nextErrors
+        }
       })
     }
 
@@ -163,48 +196,61 @@ export default function App({
     return () => {
       window.removeEventListener('message', onMessage)
     }
-  }, [previewDiagnosticsChannelId])
+  }, [])
 
   const abortPreviewDiagnostics = useCallback(() => {
     previewDiagnosticsAbortControllerRef.current?.abort()
     previewDiagnosticsAbortControllerRef.current = null
   }, [])
 
+  const rotatePreviewDiagnosticsChannel = useCallback((): string => {
+    const nextChannelId = createDiagnosticsChannelId('preview')
+    previewDiagnosticsChannelIdRef.current = nextChannelId
+    setPreviewDiagnosticsChannelId(nextChannelId)
+    return nextChannelId
+  }, [])
+
   const clearPreviewDiagnostics = useCallback(() => {
-    diagnosticsRunIdRef.current += 1
     abortPreviewDiagnostics()
-    setPassivePreviewDiagnosticErrors([])
-    setActivePreviewDiagnosticErrors([])
-    setPreviewDiagnosticsPending(false)
-    setPreviewDiagnosticsChannelId(createDiagnosticsChannelId('preview'))
-  }, [abortPreviewDiagnostics])
+    rotatePreviewDiagnosticsChannel()
+    setPreviewDiagnostics(EMPTY_PREVIEW_DIAGNOSTICS_STATE)
+  }, [abortPreviewDiagnostics, rotatePreviewDiagnosticsChannel])
 
   const startPreviewDiagnostics = useCallback(
-    (nextRenderResult: RenderResult) => {
-      const diagnosticsRunId = diagnosticsRunIdRef.current + 1
-      diagnosticsRunIdRef.current = diagnosticsRunId
+    (nextRenderResult: RenderResult, markdownSnapshot: string) => {
+      const diagnosticsChannelId = rotatePreviewDiagnosticsChannel()
       abortPreviewDiagnostics()
       const abortController = new AbortController()
       previewDiagnosticsAbortControllerRef.current = abortController
 
-      setPassivePreviewDiagnosticErrors([])
-      setActivePreviewDiagnosticErrors([])
-      setPreviewDiagnosticsPending(true)
-      setPreviewDiagnosticsChannelId(createDiagnosticsChannelId('preview'))
+      setPreviewDiagnostics({
+        markdownSnapshot,
+        pending: true,
+        errors: []
+      })
 
       void services.diagnosticsInspector
         .inspect(nextRenderResult, { signal: abortController.signal })
         .then((issues) => {
-          if (diagnosticsRunIdRef.current !== diagnosticsRunId) {
+          if (previewDiagnosticsChannelIdRef.current !== diagnosticsChannelId) {
             return
           }
 
-          const normalizedIssues = Array.from(new Set(issues.map((issue) => issue.trim()).filter((issue) => issue.length > 0)))
-          setActivePreviewDiagnosticErrors(normalizedIssues)
-          setPreviewDiagnosticsPending(false)
+          const normalizedIssues = normalizeDiagnosticsIssues(issues)
+          setPreviewDiagnostics((currentDiagnostics) => {
+            if (currentDiagnostics.markdownSnapshot !== markdownSnapshot) {
+              return currentDiagnostics
+            }
+
+            return {
+              markdownSnapshot,
+              pending: false,
+              errors: normalizeDiagnosticsIssues([...currentDiagnostics.errors, ...normalizedIssues])
+            }
+          })
         })
         .catch((error) => {
-          if (diagnosticsRunIdRef.current !== diagnosticsRunId) {
+          if (previewDiagnosticsChannelIdRef.current !== diagnosticsChannelId) {
             return
           }
 
@@ -212,8 +258,17 @@ export default function App({
             return
           }
 
-          setActivePreviewDiagnosticErrors([toErrorMessage(error, messages.unknownError)])
-          setPreviewDiagnosticsPending(false)
+          setPreviewDiagnostics((currentDiagnostics) => {
+            if (currentDiagnostics.markdownSnapshot !== markdownSnapshot) {
+              return currentDiagnostics
+            }
+
+            return {
+              markdownSnapshot,
+              pending: false,
+              errors: appendUniqueDiagnosticIssue(currentDiagnostics.errors, toErrorMessage(error, messages.unknownError))
+            }
+          })
         })
         .finally(() => {
           if (previewDiagnosticsAbortControllerRef.current === abortController) {
@@ -221,7 +276,7 @@ export default function App({
           }
         })
     },
-    [abortPreviewDiagnostics, messages.unknownError, services.diagnosticsInspector]
+    [abortPreviewDiagnostics, messages.unknownError, rotatePreviewDiagnosticsChannel, services.diagnosticsInspector]
   )
 
   useEffect(() => {
@@ -242,6 +297,19 @@ export default function App({
 
   useEffect(() => {
     if (markdown.trim().length === 0) {
+      return
+    }
+
+    abortPreviewDiagnostics()
+    setPreviewDiagnostics({
+      markdownSnapshot: null,
+      pending: true,
+      errors: []
+    })
+  }, [abortPreviewDiagnostics, effectiveMarkdown, markdown])
+
+  useEffect(() => {
+    if (markdown.trim().length === 0) {
       setRenderResult(EMPTY_RENDER_RESULT)
       setRenderError(null)
       clearPreviewDiagnostics()
@@ -253,7 +321,7 @@ export default function App({
         const result = services.renderer.render(effectiveMarkdown)
         setRenderResult(result)
         setRenderError(null)
-        startPreviewDiagnostics(result)
+        startPreviewDiagnostics(result, effectiveMarkdown)
       } catch (error) {
         setRenderResult(EMPTY_RENDER_RESULT)
         setRenderError(toErrorMessage(error, messages.unknownError))
@@ -281,10 +349,6 @@ export default function App({
     startPreviewDiagnostics
   ])
 
-  const previewDiagnosticErrors = useMemo(
-    () => Array.from(new Set([...passivePreviewDiagnosticErrors, ...activePreviewDiagnosticErrors])),
-    [activePreviewDiagnosticErrors, passivePreviewDiagnosticErrors]
-  )
   const availableThemeNames = useMemo(
     () => mergeThemeNames(getBuiltInThemeNamesFn(), customThemeNames),
     [customThemeNames, getBuiltInThemeNamesFn]
@@ -311,8 +375,13 @@ export default function App({
 
   const slideCount = renderResult.html.length
   const hasMarkdown = markdown.trim().length > 0
+  const previewDiagnosticErrors = previewDiagnostics.errors
+  const previewDiagnosticsPending = previewDiagnostics.pending
+  const isPreviewDiagnosticsFresh =
+    !previewDiagnostics.pending && previewDiagnostics.markdownSnapshot === effectiveMarkdown
   const canExportHtml = hasMarkdown
-  const canExportPdf = hasMarkdown && !previewDiagnosticsPending && previewDiagnosticErrors.length === 0
+  const canExportPdf =
+    hasMarkdown && renderError === null && isPreviewDiagnosticsFresh && previewDiagnosticErrors.length === 0
   const canPresent = renderError === null && slideCount > 0
 
   const pdfDisabledReason = !hasMarkdown

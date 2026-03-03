@@ -92,36 +92,6 @@ describe('BrowserPdfExporter', () => {
     vi.useRealTimers()
   })
 
-  it('fails fast when diagnostics inspector reports resource issues', async () => {
-    const renderedResult = { html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '' }
-    const renderer = {
-      render: vi.fn(() => renderedResult)
-    }
-    const diagnosticsInspector = {
-      inspect: vi.fn(async () => ['GET https://marp.app/assets/marp.svg net::ERR_CONNECTION_CLOSED'])
-    }
-
-    const createIframe = vi.fn(() =>
-      createPrintableIframe({
-        ...createLifecycleTarget(),
-        focus: vi.fn(),
-        print: vi.fn()
-      })
-    )
-
-    const exporter = new BrowserPdfExporter({
-      renderer,
-      diagnosticsInspector,
-      createIframe: createIframe as never
-    })
-
-    await expect(exporter.export('# title')).rejects.toThrow(
-      'GET https://marp.app/assets/marp.svg net::ERR_CONNECTION_CLOSED'
-    )
-    expect(diagnosticsInspector.inspect).toHaveBeenCalledWith(renderedResult)
-    expect(createIframe).not.toHaveBeenCalled()
-  })
-
   it('prints deck through hidden iframe and cleans up listeners', async () => {
     const renderer = {
       render: vi.fn(() => ({ html: ['<svg data-marpit-svg="" id="slide"></svg>'], css: '.deck{}' }))

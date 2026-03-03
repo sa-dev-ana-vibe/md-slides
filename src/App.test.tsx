@@ -523,6 +523,42 @@ describe('App', () => {
     })
   })
 
+  it('disables pdf immediately after markdown edits until diagnostics revalidate current content', async () => {
+    const secondDiagnosticsDeferred = createDeferred<string[]>()
+    const diagnosticsInspector = {
+      inspect: vi.fn().mockResolvedValueOnce([]).mockImplementationOnce(() => secondDiagnosticsDeferred.promise)
+    }
+
+    const { services } = createFakeServices({ diagnosticsInspector })
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={60} />, services)
+
+    const user = userEvent.setup()
+    const markdownInput = screen.getByTestId('app-markdown-input')
+    await user.type(markdownInput, '# one')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
+    })
+
+    await user.type(markdownInput, '\n# two')
+
+    const pdfButton = screen.getByRole('button', { name: 'Export PDF' })
+    expect(pdfButton).toBeDisabled()
+    expect(pdfButton).toHaveAttribute('title', 'Checking external resources before enabling PDF export.')
+
+    await waitFor(() => {
+      expect(diagnosticsInspector.inspect).toHaveBeenCalledTimes(2)
+    })
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
+
+    secondDiagnosticsDeferred.resolve([])
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled()
+    })
+  })
+
   it('shows active diagnostics issues from inspector and keeps pdf disabled', async () => {
     const diagnosticsInspector = {
       inspect: vi.fn(async () => ['TypeError: Failed to fetch: https://marp.app/assets/hero-background.svg'])

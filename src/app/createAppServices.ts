@@ -14,7 +14,7 @@ export function createAppServices(overrides: Partial<AppServices> = {}): AppServ
   return {
     renderer,
     htmlExporter: overrides.htmlExporter ?? new BrowserHtmlExporter({ renderer }),
-    pdfExporter: overrides.pdfExporter ?? new BrowserPdfExporter({ renderer, diagnosticsInspector }),
+    pdfExporter: overrides.pdfExporter ?? new BrowserPdfExporter({ renderer }),
     diagnosticsInspector,
     importer: overrides.importer ?? new BrowserMarkdownFileImporter(),
     confirm: overrides.confirm ?? new WindowConfirmService(),
