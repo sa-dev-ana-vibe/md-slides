@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import App, { CHAT_GPT_PROMPT_BASE_URL } from './App'
@@ -90,6 +90,10 @@ function parsePromptFromChatGptUrl(url: string): string {
   return decodeURIComponent(url.slice(CHAT_GPT_PROMPT_BASE_URL.length))
 }
 
+function getAskAiDialog() {
+  return screen.getByRole('dialog', { name: 'Ask AI' })
+}
+
 describe('App', () => {
   it('renders base layout and disables exports with empty markdown', () => {
     const { services } = createFakeServices()
@@ -135,13 +139,14 @@ describe('App', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+    const dialog = within(getAskAiDialog())
 
-    expect(screen.getByRole('dialog', { name: 'Ask AI' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Presentation brief')).toHaveValue('')
-    expect(screen.getByLabelText('Theme')).toHaveValue('default')
-    expect(screen.getByRole('checkbox', { name: 'Include presenter notes' })).not.toBeChecked()
-    expect(screen.getByLabelText('Target slide count')).toHaveValue('medium')
-    expect(screen.getByLabelText('Size preset')).toHaveValue('')
+    expect(getAskAiDialog()).toBeInTheDocument()
+    expect(dialog.getByLabelText('Presentation brief')).toHaveValue('')
+    expect(dialog.getByLabelText('Theme')).toHaveValue('default')
+    expect(dialog.getByRole('checkbox', { name: 'Include presenter notes' })).not.toBeChecked()
+    expect(dialog.getByLabelText('Target slide count')).toHaveValue('medium')
+    expect(dialog.getByLabelText('Size preset')).toHaveValue('')
   })
 
   it('copies generated ask ai prompt to clipboard writer', async () => {
@@ -157,12 +162,13 @@ describe('App', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Ask AI' }))
-    await user.type(screen.getByLabelText('Presentation brief'), 'Create slides about product launch plan')
-    await user.selectOptions(screen.getByLabelText('Theme'), 'gaia')
-    await user.click(screen.getByRole('checkbox', { name: 'Include presenter notes' }))
-    await user.selectOptions(screen.getByLabelText('Target slide count'), 'large')
-    await user.selectOptions(screen.getByLabelText('Size preset'), '4:3')
-    await user.click(screen.getByRole('button', { name: 'Copy Prompt' }))
+    const dialog = within(getAskAiDialog())
+    await user.type(dialog.getByLabelText('Presentation brief'), 'Create slides about product launch plan')
+    await user.selectOptions(dialog.getByLabelText('Theme'), 'gaia')
+    await user.click(dialog.getByRole('checkbox', { name: 'Include presenter notes' }))
+    await user.selectOptions(dialog.getByLabelText('Target slide count'), 'large')
+    await user.selectOptions(dialog.getByLabelText('Size preset'), '4:3')
+    await user.click(dialog.getByRole('button', { name: 'Copy Prompt' }))
 
     await waitFor(() => {
       expect(clipboardWriter.writeText).toHaveBeenCalledTimes(1)
@@ -189,15 +195,16 @@ describe('App', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Ask AI' }))
-    await user.type(screen.getByLabelText('Presentation brief'), 'Roadmap update deck')
-    await user.click(screen.getByRole('button', { name: 'Open ChatGPT' }))
+    const dialog = within(getAskAiDialog())
+    await user.type(dialog.getByLabelText('Presentation brief'), 'Roadmap update deck')
+    await user.click(dialog.getByRole('button', { name: 'Open ChatGPT' }))
 
     expect(openExternalUrl).toHaveBeenCalledTimes(1)
 
     const openedUrl = openExternalUrl.mock.calls[0][0] as string
     const prompt = parsePromptFromChatGptUrl(openedUrl)
     expect(prompt).toContain('USER_BRIEF:\nRoadmap update deck')
-    expect(screen.getByRole('dialog', { name: 'Ask AI' })).toBeInTheDocument()
+    expect(getAskAiDialog()).toBeInTheDocument()
   })
 
   it('surfaces ask ai copy errors', async () => {
@@ -215,7 +222,8 @@ describe('App', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Ask AI' }))
-    await user.click(screen.getByRole('button', { name: 'Copy Prompt' }))
+    const dialog = within(getAskAiDialog())
+    await user.click(dialog.getByRole('button', { name: 'Copy Prompt' }))
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Failed to copy prompt: Clipboard API is not available in this browser.')
@@ -233,7 +241,8 @@ describe('App', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Ask AI' }))
-    await user.click(screen.getByRole('button', { name: 'Open ChatGPT' }))
+    const dialog = within(getAskAiDialog())
+    await user.click(dialog.getByRole('button', { name: 'Open ChatGPT' }))
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Failed to open ChatGPT: Popup was blocked by the browser.')
@@ -255,10 +264,100 @@ describe('App', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+    const dialog = within(getAskAiDialog())
 
-    expect(screen.getByRole('option', { name: 'default' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'gaia' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'brand-blue' })).toBeInTheDocument()
+    expect(dialog.getByRole('option', { name: 'default' })).toBeInTheDocument()
+    expect(dialog.getByRole('option', { name: 'gaia' })).toBeInTheDocument()
+    expect(dialog.getByRole('option', { name: 'brand-blue' })).toBeInTheDocument()
+  })
+
+  it('syncs preview theme and size into ask ai when opening the modal', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.selectOptions(screen.getByLabelText('Theme'), 'gaia')
+    await user.selectOptions(screen.getByLabelText('Size preset'), '4:3')
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+
+    const dialog = within(getAskAiDialog())
+    expect(dialog.getByLabelText('Theme')).toHaveValue('gaia')
+    expect(dialog.getByLabelText('Size preset')).toHaveValue('4:3')
+  })
+
+  it('does not live-sync ask ai edits back into preview controls', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.selectOptions(screen.getByLabelText('Theme'), 'gaia')
+    await user.selectOptions(screen.getByLabelText('Size preset'), '4:3')
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+
+    const dialog = within(getAskAiDialog())
+    await user.selectOptions(dialog.getByLabelText('Theme'), 'uncover')
+    await user.selectOptions(dialog.getByLabelText('Size preset'), '')
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.getByLabelText('Theme')).toHaveValue('gaia')
+    expect(screen.getByLabelText('Size preset')).toHaveValue('4:3')
+
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+    const reopenedDialog = within(getAskAiDialog())
+    expect(reopenedDialog.getByLabelText('Theme')).toHaveValue('gaia')
+    expect(reopenedDialog.getByLabelText('Size preset')).toHaveValue('4:3')
+  })
+
+  it('initializes preview selectors from markdown front matter', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(
+      screen.getByTestId('app-markdown-input'),
+      ['---', 'theme: uncover', 'size: "4:3"', 'paginate: true', '---', '# Intro'].join('\n')
+    )
+
+    expect(screen.getByLabelText('Theme')).toHaveValue('uncover')
+    expect(screen.getByLabelText('Size preset')).toHaveValue('4:3')
+  })
+
+  it('applies preview theme and size overrides to renderer and export flows', async () => {
+    const render = vi.fn((markdown: string) => ({
+      html: [`<svg data-marpit-svg=""><foreignObject><section>${markdown}</section></foreignObject></svg>`],
+      css: '.x{}'
+    }))
+    const htmlExport = vi.fn()
+    const pdfExport = vi.fn(async () => undefined)
+    const { services } = createFakeServices({
+      renderer: { render },
+      htmlExporter: { export: htmlExport },
+      pdfExporter: { export: pdfExport }
+    })
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('app-markdown-input'), '# slide')
+    await user.selectOptions(screen.getByLabelText('Theme'), 'gaia')
+    await user.selectOptions(screen.getByLabelText('Size preset'), '4:3')
+
+    const expectedMarkdown = ['---', 'theme: "gaia"', 'size: "4:3"', '---', '# slide'].join('\n')
+
+    await waitFor(() => {
+      expect(render).toHaveBeenLastCalledWith(expectedMarkdown)
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Export HTML' }))
+    expect(htmlExport).toHaveBeenCalledWith(expectedMarkdown, expect.stringMatching(/^slide-\d{8}-\d{6}\.html$/))
+
+    await user.click(screen.getByRole('button', { name: 'Export PDF' }))
+    await waitFor(() => {
+      expect(pdfExport).toHaveBeenCalledWith(expectedMarkdown)
+    })
   })
 
   it('renders markdown via renderer and updates preview count', async () => {

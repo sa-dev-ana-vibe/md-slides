@@ -1,10 +1,30 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import type { ComponentProps } from 'react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
 import { PreviewPane } from './PreviewPane'
 
 describe('PreviewPane', () => {
+  function renderPreviewPane(overrides: Partial<ComponentProps<typeof PreviewPane>> = {}): void {
+    render(
+      <PreviewPane
+        documentHtml="<html></html>"
+        slideCount={0}
+        themeNames={['default', 'gaia']}
+        themeName="default"
+        sizePreset=""
+        diagnosticErrors={[]}
+        diagnosticsPending={false}
+        onThemeNameChange={() => undefined}
+        onSizePresetChange={() => undefined}
+        errorMessage={null}
+        {...overrides}
+      />
+    )
+  }
+
   it('renders placeholder for zero slides', () => {
-    render(<PreviewPane documentHtml="<html></html>" slideCount={0} diagnosticErrors={[]} diagnosticsPending={false} errorMessage={null} />)
+    renderPreviewPane()
 
     expect(screen.getByText('0 slides')).toBeInTheDocument()
     expect(screen.getByText('Start typing markdown to generate slides.')).toBeInTheDocument()
@@ -12,44 +32,44 @@ describe('PreviewPane', () => {
   })
 
   it('renders singular label for one slide', () => {
-    render(<PreviewPane documentHtml="<html></html>" slideCount={1} diagnosticErrors={[]} diagnosticsPending={false} errorMessage={null} />)
+    renderPreviewPane({ slideCount: 1 })
 
     expect(screen.getByText('1 slide')).toBeInTheDocument()
   })
 
   it('shows preview diagnostics', () => {
-    render(
-      <PreviewPane
-        documentHtml="<html></html>"
-        slideCount={2}
-        diagnosticErrors={['Failed to load IMG: https://example.com/marp.svg']}
-        diagnosticsPending={false}
-        errorMessage={null}
-      />
-    )
+    renderPreviewPane({
+      slideCount: 2,
+      diagnosticErrors: ['Failed to load IMG: https://example.com/marp.svg']
+    })
 
     expect(screen.getByRole('alert')).toHaveTextContent('Preview issues detected. PDF export is disabled until they are resolved.')
     expect(screen.getByText('Failed to load IMG: https://example.com/marp.svg')).toBeInTheDocument()
   })
 
   it('shows diagnostics pending notice', () => {
-    render(
-      <PreviewPane
-        documentHtml="<html></html>"
-        slideCount={2}
-        diagnosticErrors={[]}
-        diagnosticsPending={true}
-        errorMessage={null}
-      />
-    )
+    renderPreviewPane({ slideCount: 2, diagnosticsPending: true })
 
     expect(screen.getByRole('status')).toHaveTextContent('Checking external resources used by slides...')
   })
 
   it('shows preview error', () => {
-    render(<PreviewPane documentHtml="<html></html>" slideCount={2} diagnosticErrors={[]} diagnosticsPending={false} errorMessage="Render failed" />)
+    renderPreviewPane({ slideCount: 2, errorMessage: 'Render failed' })
 
     expect(screen.getByRole('alert')).toHaveTextContent('Render failed')
     expect(screen.queryByTitle('Slides preview')).not.toBeInTheDocument()
+  })
+
+  it('calls preview selection handlers', async () => {
+    const onThemeNameChange = vi.fn()
+    const onSizePresetChange = vi.fn()
+    renderPreviewPane({ onThemeNameChange, onSizePresetChange })
+
+    const user = userEvent.setup()
+    await user.selectOptions(screen.getByLabelText('Theme'), 'gaia')
+    await user.selectOptions(screen.getByLabelText('Size preset'), '4:3')
+
+    expect(onThemeNameChange).toHaveBeenCalledWith('gaia')
+    expect(onSizePresetChange).toHaveBeenCalledWith('4:3')
   })
 })

@@ -13,6 +13,7 @@ import { buildStandaloneHtml } from './infrastructure/export/buildStandaloneHtml
 import { buildHtmlExportFileName } from './infrastructure/export/buildHtmlExportFileName'
 import { asDiagnosticsMessage, createDiagnosticsChannelId } from './infrastructure/export/diagnostics'
 import { getBuiltInThemeNames, mergeThemeNames } from './infrastructure/marp/themeNames'
+import { applyFrontMatterOverrides, extractFrontMatterDeckSettings } from './infrastructure/marp/frontMatterSettings'
 import {
   buildAskAiFullPrompt,
   buildChatGptPromptUrl,
@@ -46,6 +47,14 @@ function toErrorMessage(error: unknown, fallback: string): string {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
+}
+
+function toKnownSizePreset(sizePreset: string | undefined): SizePreset {
+  if (sizePreset === '16:9' || sizePreset === '4:3') {
+    return sizePreset
+  }
+
+  return ''
 }
 
 function writeTextToClipboard(text: string): Promise<void> {
@@ -94,6 +103,8 @@ export default function App({
   const [askAiIncludePresenterNotes, setAskAiIncludePresenterNotes] = useState(false)
   const [askAiTargetSlideCount, setAskAiTargetSlideCount] = useState<TargetSlideVibe>('medium')
   const [askAiSizePreset, setAskAiSizePreset] = useState<SizePreset>('')
+  const [previewThemeOverride, setPreviewThemeOverride] = useState<string | null>(null)
+  const [previewSizeOverride, setPreviewSizeOverride] = useState<SizePreset | null>(null)
   const [renderResult, setRenderResult] = useState<RenderResult>(EMPTY_RENDER_RESULT)
   const [renderError, setRenderError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -220,6 +231,16 @@ export default function App({
     }
   }, [abortPreviewDiagnostics])
 
+  const deckFrontMatterSettings = useMemo(() => extractFrontMatterDeckSettings(markdown), [markdown])
+  const effectiveMarkdown = useMemo(
+    () =>
+      applyFrontMatterOverrides(markdown, {
+        themeName: previewThemeOverride ?? undefined,
+        sizePreset: previewSizeOverride ?? undefined
+      }),
+    [markdown, previewSizeOverride, previewThemeOverride]
+  )
+
   useEffect(() => {
     if (markdown.trim().length === 0) {
       setRenderResult(EMPTY_RENDER_RESULT)
@@ -230,7 +251,7 @@ export default function App({
 
     const runRender = () => {
       try {
-        const result = services.renderer.render(markdown)
+        const result = services.renderer.render(effectiveMarkdown)
         setRenderResult(result)
         setRenderError(null)
         startPreviewDiagnostics(result)
@@ -251,7 +272,15 @@ export default function App({
     return () => {
       window.clearTimeout(timer)
     }
-  }, [clearPreviewDiagnostics, markdown, messages.unknownError, renderDebounceMs, services.renderer, startPreviewDiagnostics])
+  }, [
+    clearPreviewDiagnostics,
+    effectiveMarkdown,
+    markdown,
+    messages.unknownError,
+    renderDebounceMs,
+    services.renderer,
+    startPreviewDiagnostics
+  ])
 
   const previewDiagnosticErrors = useMemo(
     () => Array.from(new Set([...passivePreviewDiagnosticErrors, ...activePreviewDiagnosticErrors])),
@@ -265,6 +294,21 @@ export default function App({
     () => availableThemeNames.find((themeName) => themeName.toLowerCase() === 'default') ?? availableThemeNames[0],
     [availableThemeNames]
   )
+  const inferredPreviewThemeName = useMemo(() => {
+    const frontMatterThemeName = deckFrontMatterSettings.themeName
+
+    if (frontMatterThemeName && availableThemeNames.includes(frontMatterThemeName)) {
+      return frontMatterThemeName
+    }
+
+    return defaultAskAiThemeName
+  }, [availableThemeNames, deckFrontMatterSettings.themeName, defaultAskAiThemeName])
+  const inferredPreviewSizePreset = useMemo(
+    () => toKnownSizePreset(deckFrontMatterSettings.sizePreset),
+    [deckFrontMatterSettings.sizePreset]
+  )
+  const previewThemeName = previewThemeOverride ?? inferredPreviewThemeName
+  const previewSizePreset = previewSizeOverride ?? inferredPreviewSizePreset
 
   const slideCount = renderResult.html.length
   const hasMarkdown = markdown.trim().length > 0
@@ -370,15 +414,29 @@ export default function App({
     setIsPresentationOpen(false)
   }, [])
 
+  const handlePreviewThemeNameChange = useCallback(
+    (nextThemeName: string) => {
+      setPreviewThemeOverride(nextThemeName === inferredPreviewThemeName ? null : nextThemeName)
+    },
+    [inferredPreviewThemeName]
+  )
+
+  const handlePreviewSizePresetChange = useCallback(
+    (nextSizePreset: SizePreset) => {
+      setPreviewSizeOverride(nextSizePreset === inferredPreviewSizePreset ? null : nextSizePreset)
+    },
+    [inferredPreviewSizePreset]
+  )
+
   const handleOpenAskAi = useCallback(() => {
     setActionError(null)
     setAskAiBrief('')
-    setAskAiThemeName(defaultAskAiThemeName)
+    setAskAiThemeName(previewThemeName)
     setAskAiIncludePresenterNotes(false)
     setAskAiTargetSlideCount('medium')
-    setAskAiSizePreset('')
+    setAskAiSizePreset(previewSizePreset)
     setIsAskAiOpen(true)
-  }, [defaultAskAiThemeName])
+  }, [previewSizePreset, previewThemeName])
 
   const handleCloseAskAi = useCallback(() => {
     setIsAskAiOpen(false)
@@ -441,6 +499,18 @@ export default function App({
     setAskAiThemeName(defaultAskAiThemeName)
   }, [askAiThemeName, availableThemeNames, defaultAskAiThemeName])
 
+  useEffect(() => {
+    if (previewThemeOverride === null) {
+      return
+    }
+
+    if (availableThemeNames.some((themeName) => themeName === previewThemeOverride)) {
+      return
+    }
+
+    setPreviewThemeOverride(defaultAskAiThemeName)
+  }, [availableThemeNames, defaultAskAiThemeName, previewThemeOverride])
+
   const previewDocumentHtml = useMemo(
     () =>
       buildStandaloneHtml(renderResult, messages.previewDocumentTitle, {
@@ -473,10 +543,10 @@ export default function App({
           onEnterPresentation={handleEnterPresentation}
           onExportHtml={() => {
             const fileName = buildHtmlExportFileName({ markdown, sourceFileName })
-            void runExport('html', () => services.htmlExporter.export(markdown, fileName))
+            void runExport('html', () => services.htmlExporter.export(effectiveMarkdown, fileName))
           }}
           onExportPdf={() => {
-            void runExport('pdf', () => services.pdfExporter.export(markdown))
+            void runExport('pdf', () => services.pdfExporter.export(effectiveMarkdown))
           }}
         />
 
@@ -490,8 +560,13 @@ export default function App({
           <PreviewPane
             documentHtml={previewDocumentHtml}
             slideCount={slideCount}
+            themeNames={availableThemeNames}
+            themeName={previewThemeName}
+            sizePreset={previewSizePreset}
             diagnosticErrors={previewDiagnosticErrors}
             diagnosticsPending={previewDiagnosticsPending}
+            onThemeNameChange={handlePreviewThemeNameChange}
+            onSizePresetChange={handlePreviewSizePresetChange}
             errorMessage={renderError}
             iframeRef={previewFrameRef}
           />
