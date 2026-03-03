@@ -9,6 +9,48 @@ const assetsPathPrefix = `${basePath}assets/`
 
 export default defineConfig({
   base: basePath,
+  build: {
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/mathjax-full/')) {
+            return 'vendor-mathjax'
+          }
+
+          if (id.includes('node_modules/highlight.js/')) {
+            return 'vendor-highlight'
+          }
+
+          if (
+            id.includes('node_modules/@marp-team/marp-core/') ||
+            id.includes('node_modules/@marp-team/marpit/') ||
+            id.includes('node_modules/@marp-team/marpit-svg-polyfill/') ||
+            id.includes('node_modules/katex/')
+          ) {
+            return 'vendor-marp'
+          }
+
+          if (
+            id.includes('node_modules/@uiw/react-codemirror/') ||
+            id.includes('node_modules/@uiw/codemirror-extensions-basic-setup/') ||
+            id.includes('node_modules/@codemirror/') ||
+            id.includes('node_modules/@lezer/') ||
+            id.includes('node_modules/@marijn/find-cluster-break/') ||
+            id.includes('node_modules/style-mod/') ||
+            id.includes('node_modules/w3c-keyname/') ||
+            id.includes('node_modules/crelt/')
+          ) {
+            return 'vendor-codemirror'
+          }
+
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) {
+            return 'vendor-react'
+          }
+        }
+      }
+    }
+  },
   plugins: [
     react(),
     tailwindcss(),
