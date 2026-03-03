@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import App from './App'
+import App, { CHAT_GPT_PROMPT_BASE_URL } from './App'
 import type { MarkdownEditorAdapterProps } from './components/MarkdownEditorPane'
 import { DIAGNOSTICS_MESSAGE_SOURCE } from './infrastructure/export/diagnostics'
 import { PRESENTATION_MESSAGE_SOURCE } from './infrastructure/presentation/messages'
@@ -53,6 +53,14 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
+function parsePromptFromChatGptUrl(url: string): string {
+  if (!url.startsWith(CHAT_GPT_PROMPT_BASE_URL)) {
+    throw new Error(`Unexpected URL: ${url}`)
+  }
+
+  return decodeURIComponent(url.slice(CHAT_GPT_PROMPT_BASE_URL.length))
+}
+
 describe('App', () => {
   it('renders base layout and disables exports with empty markdown', () => {
     const { services } = createFakeServices()
@@ -60,6 +68,7 @@ describe('App', () => {
     renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
 
     expect(screen.getByText('MD Slides')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ask AI' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Present' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Export HTML' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled()
@@ -76,6 +85,7 @@ describe('App', () => {
 
     expect(screen.getByText('MD Слайды')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Открыть .md' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Спросить ИИ' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Презентация' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Экспорт HTML' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Экспорт PDF' })).toBeInTheDocument()
@@ -83,9 +93,143 @@ describe('App', () => {
     await user.selectOptions(screen.getByLabelText('Язык'), 'kk')
     expect(screen.getByText('MD Слайдтар')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '.md ашу' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'AI сұрау' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Презентация' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'HTML экспорттау' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'PDF экспорттау' })).toBeInTheDocument()
+  })
+
+  it('opens ask ai modal with default values', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(<App editorComponent={TestEditor} renderDebounceMs={0} />, services)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+
+    expect(screen.getByRole('dialog', { name: 'Ask AI' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Presentation brief')).toHaveValue('')
+    expect(screen.getByLabelText('Theme')).toHaveValue('default')
+    expect(screen.getByRole('checkbox', { name: 'Include presenter notes' })).not.toBeChecked()
+    expect(screen.getByLabelText('Target slide count')).toHaveValue('medium')
+    expect(screen.getByLabelText('Size preset')).toHaveValue('')
+  })
+
+  it('copies generated ask ai prompt to clipboard writer', async () => {
+    const clipboardWriter = {
+      writeText: vi.fn(async () => undefined)
+    }
+    const { services } = createFakeServices()
+
+    renderWithServices(
+      <App editorComponent={TestEditor} renderDebounceMs={0} clipboardWriter={clipboardWriter} />,
+      services
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+    await user.type(screen.getByLabelText('Presentation brief'), 'Create slides about product launch plan')
+    await user.selectOptions(screen.getByLabelText('Theme'), 'gaia')
+    await user.click(screen.getByRole('checkbox', { name: 'Include presenter notes' }))
+    await user.selectOptions(screen.getByLabelText('Target slide count'), 'large')
+    await user.selectOptions(screen.getByLabelText('Size preset'), '4:3')
+    await user.click(screen.getByRole('button', { name: 'Copy Prompt' }))
+
+    await waitFor(() => {
+      expect(clipboardWriter.writeText).toHaveBeenCalledTimes(1)
+    })
+
+    const prompt = clipboardWriter.writeText.mock.calls[0][0] as string
+
+    expect(prompt).toContain('- themeName = "gaia"')
+    expect(prompt).toContain('- includePresenterNotes = true')
+    expect(prompt).toContain('- targetSlideCount = "large"')
+    expect(prompt).toContain('- sizePreset = "4:3"')
+    expect(prompt).toContain('theme: "gaia"')
+    expect(prompt).toContain('USER_BRIEF:\nCreate slides about product launch plan')
+  })
+
+  it('opens chatgpt with encoded prompt and keeps ask ai modal open', async () => {
+    const openExternalUrl = vi.fn(() => ({} as Window))
+    const { services } = createFakeServices()
+
+    renderWithServices(
+      <App editorComponent={TestEditor} renderDebounceMs={0} openExternalUrl={openExternalUrl} />,
+      services
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+    await user.type(screen.getByLabelText('Presentation brief'), 'Roadmap update deck')
+    await user.click(screen.getByRole('button', { name: 'Open ChatGPT' }))
+
+    expect(openExternalUrl).toHaveBeenCalledTimes(1)
+
+    const openedUrl = openExternalUrl.mock.calls[0][0] as string
+    const prompt = parsePromptFromChatGptUrl(openedUrl)
+    expect(prompt).toContain('USER_BRIEF:\nRoadmap update deck')
+    expect(screen.getByRole('dialog', { name: 'Ask AI' })).toBeInTheDocument()
+  })
+
+  it('surfaces ask ai copy errors', async () => {
+    const clipboardWriter = {
+      writeText: vi.fn(async () => {
+        throw 'copy failed'
+      })
+    }
+    const { services } = createFakeServices()
+
+    renderWithServices(
+      <App editorComponent={TestEditor} renderDebounceMs={0} clipboardWriter={clipboardWriter} />,
+      services
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+    await user.click(screen.getByRole('button', { name: 'Copy Prompt' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to copy prompt: Clipboard API is not available in this browser.')
+    })
+  })
+
+  it('surfaces ask ai open chatgpt errors when popup is blocked', async () => {
+    const openExternalUrl = vi.fn(() => null)
+    const { services } = createFakeServices()
+
+    renderWithServices(
+      <App editorComponent={TestEditor} renderDebounceMs={0} openExternalUrl={openExternalUrl} />,
+      services
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+    await user.click(screen.getByRole('button', { name: 'Open ChatGPT' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to open ChatGPT: Popup was blocked by the browser.')
+    })
+  })
+
+  it('shows custom theme names in ask ai modal', async () => {
+    const { services } = createFakeServices()
+
+    renderWithServices(
+      <App
+        editorComponent={TestEditor}
+        renderDebounceMs={0}
+        getBuiltInThemeNamesFn={() => ['default', 'gaia']}
+        customThemeNames={['brand-blue']}
+      />,
+      services
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+
+    expect(screen.getByRole('option', { name: 'default' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'gaia' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'brand-blue' })).toBeInTheDocument()
   })
 
   it('renders markdown via renderer and updates preview count', async () => {

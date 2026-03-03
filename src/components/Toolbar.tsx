@@ -7,6 +7,7 @@ interface ToolbarProps {
   canPresent: boolean
   busyAction: ExportFormat | 'open' | null
   pdfDisabledReason?: string
+  onOpenAskAi: () => void
   onOpenMarkdown: () => void
   onEnterPresentation: () => void
   onExportHtml: () => void
@@ -28,6 +29,7 @@ export function Toolbar({
   canPresent,
   busyAction,
   pdfDisabledReason,
+  onOpenAskAi,
   onOpenMarkdown,
   onEnterPresentation,
   onExportHtml,
@@ -43,6 +45,9 @@ export function Toolbar({
     <div className="flex flex-wrap items-center gap-2" aria-label={messages.toolbarLabel}>
       <button type="button" className={buttonClass(controlsDisabled)} onClick={onOpenMarkdown} disabled={controlsDisabled}>
         {busyAction === 'open' ? messages.openingMarkdown : messages.openMarkdown}
+      </button>
+      <button type="button" className={buttonClass(controlsDisabled)} onClick={onOpenAskAi} disabled={controlsDisabled}>
+        {messages.askAiButton}
       </button>
       <button
         type="button"

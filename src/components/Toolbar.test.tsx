@@ -5,6 +5,7 @@ import { Toolbar } from './Toolbar'
 
 describe('Toolbar', () => {
   it('triggers all actions', async () => {
+    const onOpenAskAi = vi.fn()
     const onOpenMarkdown = vi.fn()
     const onEnterPresentation = vi.fn()
     const onExportHtml = vi.fn()
@@ -16,6 +17,7 @@ describe('Toolbar', () => {
         canExportPdf={true}
         canPresent={true}
         busyAction={null}
+        onOpenAskAi={onOpenAskAi}
         onOpenMarkdown={onOpenMarkdown}
         onEnterPresentation={onEnterPresentation}
         onExportHtml={onExportHtml}
@@ -25,11 +27,13 @@ describe('Toolbar', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Open .md' }))
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
     await user.click(screen.getByRole('button', { name: 'Present' }))
     await user.click(screen.getByRole('button', { name: 'Export HTML' }))
     await user.click(screen.getByRole('button', { name: 'Export PDF' }))
 
     expect(onOpenMarkdown).toHaveBeenCalledTimes(1)
+    expect(onOpenAskAi).toHaveBeenCalledTimes(1)
     expect(onEnterPresentation).toHaveBeenCalledTimes(1)
     expect(onExportHtml).toHaveBeenCalledTimes(1)
     expect(onExportPdf).toHaveBeenCalledTimes(1)
@@ -43,6 +47,7 @@ describe('Toolbar', () => {
         canPresent={false}
         pdfDisabledReason="Resolve preview loading errors to export PDF."
         busyAction={null}
+        onOpenAskAi={vi.fn()}
         onOpenMarkdown={vi.fn()}
         onEnterPresentation={vi.fn()}
         onExportHtml={vi.fn()}
@@ -65,6 +70,7 @@ describe('Toolbar', () => {
         canExportPdf={true}
         canPresent={true}
         busyAction="pdf"
+        onOpenAskAi={vi.fn()}
         onOpenMarkdown={vi.fn()}
         onEnterPresentation={vi.fn()}
         onExportHtml={vi.fn()}
@@ -74,6 +80,7 @@ describe('Toolbar', () => {
 
     expect(screen.getByRole('button', { name: 'Exporting PDF...' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Open .md' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Ask AI' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Present' })).toBeDisabled()
   })
 })

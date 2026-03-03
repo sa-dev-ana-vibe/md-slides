@@ -5,6 +5,24 @@ export interface AppMessages {
   appSubtitle: string
   toolbarLabel: string
   languageLabel: string
+  askAiButton: string
+  askAiModalTitle: string
+  askAiClose: string
+  askAiCancel: string
+  askAiBriefLabel: string
+  askAiBriefPlaceholder: string
+  askAiThemeLabel: string
+  askAiIncludePresenterNotesLabel: string
+  askAiTargetSlideCountLabel: string
+  askAiTargetSlideCountSmall: string
+  askAiTargetSlideCountMedium: string
+  askAiTargetSlideCountLarge: string
+  askAiSizePresetLabel: string
+  askAiSizePresetOmit: string
+  askAiCopyPrompt: string
+  askAiOpenChatGpt: string
+  askAiClipboardUnavailable: string
+  askAiPopupBlocked: string
   openMarkdown: string
   openingMarkdown: string
   exportHtml: string
@@ -24,6 +42,8 @@ export interface AppMessages {
   failedToReadDroppedFile: (error: string) => string
   failedToExportHtml: (error: string) => string
   failedToExportPdf: (error: string) => string
+  failedToCopyAskAiPrompt: (error: string) => string
+  failedToOpenChatGpt: (error: string) => string
   previewDocumentTitle: string
   previewLabel: string
   slideCount: (count: number) => string
@@ -51,6 +71,24 @@ const englishMessages: AppMessages = {
   appSubtitle: 'Create Marp slides from markdown, fully in the browser.',
   toolbarLabel: 'Toolbar',
   languageLabel: 'Language',
+  askAiButton: 'Ask AI',
+  askAiModalTitle: 'Ask AI',
+  askAiClose: 'Close',
+  askAiCancel: 'Cancel',
+  askAiBriefLabel: 'Presentation brief',
+  askAiBriefPlaceholder: 'Describe your presentation topic, audience, and style...',
+  askAiThemeLabel: 'Theme',
+  askAiIncludePresenterNotesLabel: 'Include presenter notes',
+  askAiTargetSlideCountLabel: 'Target slide count',
+  askAiTargetSlideCountSmall: 'Small',
+  askAiTargetSlideCountMedium: 'Medium',
+  askAiTargetSlideCountLarge: 'Large',
+  askAiSizePresetLabel: 'Size preset',
+  askAiSizePresetOmit: 'Omit size',
+  askAiCopyPrompt: 'Copy Prompt',
+  askAiOpenChatGpt: 'Open ChatGPT',
+  askAiClipboardUnavailable: 'Clipboard API is not available in this browser.',
+  askAiPopupBlocked: 'Popup was blocked by the browser.',
   openMarkdown: 'Open .md',
   openingMarkdown: 'Opening...',
   exportHtml: 'Export HTML',
@@ -70,6 +108,8 @@ const englishMessages: AppMessages = {
   failedToReadDroppedFile: (error) => `Failed to read dropped file: ${error}`,
   failedToExportHtml: (error) => `Failed to export HTML: ${error}`,
   failedToExportPdf: (error) => `Failed to export PDF: ${error}`,
+  failedToCopyAskAiPrompt: (error) => `Failed to copy prompt: ${error}`,
+  failedToOpenChatGpt: (error) => `Failed to open ChatGPT: ${error}`,
   previewDocumentTitle: 'MD Slides Preview',
   previewLabel: 'Preview',
   slideCount: (count) => `${count} slide${count === 1 ? '' : 's'}`,
@@ -87,6 +127,24 @@ const russianMessages: AppMessages = {
   appSubtitle: 'Создавайте слайды Marp из markdown полностью в браузере.',
   toolbarLabel: 'Панель инструментов',
   languageLabel: 'Язык',
+  askAiButton: 'Спросить ИИ',
+  askAiModalTitle: 'Спросить ИИ',
+  askAiClose: 'Закрыть',
+  askAiCancel: 'Отмена',
+  askAiBriefLabel: 'Бриф презентации',
+  askAiBriefPlaceholder: 'Опишите тему, аудиторию и стиль презентации...',
+  askAiThemeLabel: 'Тема',
+  askAiIncludePresenterNotesLabel: 'Добавить заметки докладчика',
+  askAiTargetSlideCountLabel: 'Желаемый размер колоды',
+  askAiTargetSlideCountSmall: 'Маленькая',
+  askAiTargetSlideCountMedium: 'Средняя',
+  askAiTargetSlideCountLarge: 'Большая',
+  askAiSizePresetLabel: 'Формат слайда',
+  askAiSizePresetOmit: 'Не указывать',
+  askAiCopyPrompt: 'Копировать промпт',
+  askAiOpenChatGpt: 'Открыть ChatGPT',
+  askAiClipboardUnavailable: 'Clipboard API недоступен в этом браузере.',
+  askAiPopupBlocked: 'Браузер заблокировал всплывающее окно.',
   openMarkdown: 'Открыть .md',
   openingMarkdown: 'Открытие...',
   exportHtml: 'Экспорт HTML',
@@ -106,6 +164,8 @@ const russianMessages: AppMessages = {
   failedToReadDroppedFile: (error) => `Не удалось прочитать перетащенный файл: ${error}`,
   failedToExportHtml: (error) => `Не удалось экспортировать HTML: ${error}`,
   failedToExportPdf: (error) => `Не удалось экспортировать PDF: ${error}`,
+  failedToCopyAskAiPrompt: (error) => `Не удалось скопировать промпт: ${error}`,
+  failedToOpenChatGpt: (error) => `Не удалось открыть ChatGPT: ${error}`,
   previewDocumentTitle: 'Предпросмотр MD Слайдов',
   previewLabel: 'Предпросмотр',
   slideCount: (count) => {
@@ -128,6 +188,24 @@ const kazakhMessages: AppMessages = {
   appSubtitle: 'Marp слайдтарын markdown-нан браузерде жасаңыз.',
   toolbarLabel: 'Құралдар панелі',
   languageLabel: 'Тіл',
+  askAiButton: 'AI сұрау',
+  askAiModalTitle: 'AI сұрау',
+  askAiClose: 'Жабу',
+  askAiCancel: 'Бас тарту',
+  askAiBriefLabel: 'Презентация брифі',
+  askAiBriefPlaceholder: 'Презентация тақырыбын, аудиториясын және стилін сипаттаңыз...',
+  askAiThemeLabel: 'Тақырып',
+  askAiIncludePresenterNotesLabel: 'Баяндамашы ескертпелерін қосу',
+  askAiTargetSlideCountLabel: 'Слайд көлемі',
+  askAiTargetSlideCountSmall: 'Кіші',
+  askAiTargetSlideCountMedium: 'Орта',
+  askAiTargetSlideCountLarge: 'Үлкен',
+  askAiSizePresetLabel: 'Өлшем форматы',
+  askAiSizePresetOmit: 'Өлшемсіз',
+  askAiCopyPrompt: 'Промптты көшіру',
+  askAiOpenChatGpt: 'ChatGPT ашу',
+  askAiClipboardUnavailable: 'Clipboard API бұл браузерде қолжетімсіз.',
+  askAiPopupBlocked: 'Қалқымалы терезе браузермен бұғатталды.',
   openMarkdown: '.md ашу',
   openingMarkdown: 'Ашылуда...',
   exportHtml: 'HTML экспорттау',
@@ -147,6 +225,8 @@ const kazakhMessages: AppMessages = {
   failedToReadDroppedFile: (error) => `Тасталған файлды оқу мүмкін болмады: ${error}`,
   failedToExportHtml: (error) => `HTML экспорттау сәтсіз аяқталды: ${error}`,
   failedToExportPdf: (error) => `PDF экспорттау сәтсіз аяқталды: ${error}`,
+  failedToCopyAskAiPrompt: (error) => `Промптты көшіру сәтсіз аяқталды: ${error}`,
+  failedToOpenChatGpt: (error) => `ChatGPT ашу сәтсіз аяқталды: ${error}`,
   previewDocumentTitle: 'MD Слайдтар алдын ала қарау',
   previewLabel: 'Алдын ала қарау',
   slideCount: (count) => `${count} слайд`,

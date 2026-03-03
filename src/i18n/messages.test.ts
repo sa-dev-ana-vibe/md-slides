@@ -24,6 +24,8 @@ describe('messages', () => {
     const messages = getMessages('en')
 
     expect(messages.appTitle).toBe('MD Slides')
+    expect(messages.askAiButton).toBe('Ask AI')
+    expect(messages.askAiTargetSlideCountMedium).toBe('Medium')
     expect(messages.slideCount(1)).toBe('1 slide')
     expect(messages.slideCount(2)).toBe('2 slides')
     expect(messages.enterPresentation).toBe('Present')
@@ -34,12 +36,16 @@ describe('messages', () => {
     expect(messages.failedToReadDroppedFile('boom')).toBe('Failed to read dropped file: boom')
     expect(messages.failedToExportHtml('boom')).toBe('Failed to export HTML: boom')
     expect(messages.failedToExportPdf('boom')).toBe('Failed to export PDF: boom')
+    expect(messages.failedToCopyAskAiPrompt('boom')).toBe('Failed to copy prompt: boom')
+    expect(messages.failedToOpenChatGpt('boom')).toBe('Failed to open ChatGPT: boom')
   })
 
   it('provides russian slide plural forms and interpolation', () => {
     const messages = getMessages('ru')
 
     expect(messages.appTitle).toBe('MD Слайды')
+    expect(messages.askAiButton).toBe('Спросить ИИ')
+    expect(messages.askAiTargetSlideCountMedium).toBe('Средняя')
     expect(messages.slideCount(1)).toBe('1 слайд')
     expect(messages.slideCount(2)).toBe('2 слайда')
     expect(messages.slideCount(5)).toBe('5 слайдов')
@@ -51,12 +57,16 @@ describe('messages', () => {
     expect(messages.failedToReadDroppedFile('ошибка')).toBe('Не удалось прочитать перетащенный файл: ошибка')
     expect(messages.failedToExportHtml('ошибка')).toBe('Не удалось экспортировать HTML: ошибка')
     expect(messages.failedToExportPdf('ошибка')).toBe('Не удалось экспортировать PDF: ошибка')
+    expect(messages.failedToCopyAskAiPrompt('ошибка')).toBe('Не удалось скопировать промпт: ошибка')
+    expect(messages.failedToOpenChatGpt('ошибка')).toBe('Не удалось открыть ChatGPT: ошибка')
   })
 
   it('provides kazakh text and interpolation', () => {
     const messages = getMessages('kk')
 
     expect(messages.appTitle).toBe('MD Слайдтар')
+    expect(messages.askAiButton).toBe('AI сұрау')
+    expect(messages.askAiTargetSlideCountMedium).toBe('Орта')
     expect(messages.slideCount(1)).toBe('1 слайд')
     expect(messages.slideCount(8)).toBe('8 слайд')
     expect(messages.enterPresentation).toBe('Презентация')
@@ -67,6 +77,8 @@ describe('messages', () => {
     expect(messages.failedToReadDroppedFile('қате')).toBe('Тасталған файлды оқу мүмкін болмады: қате')
     expect(messages.failedToExportHtml('қате')).toBe('HTML экспорттау сәтсіз аяқталды: қате')
     expect(messages.failedToExportPdf('қате')).toBe('PDF экспорттау сәтсіз аяқталды: қате')
+    expect(messages.failedToCopyAskAiPrompt('қате')).toBe('Промптты көшіру сәтсіз аяқталды: қате')
+    expect(messages.failedToOpenChatGpt('қате')).toBe('ChatGPT ашу сәтсіз аяқталды: қате')
   })
 
   it('parses locale from language tag', () => {

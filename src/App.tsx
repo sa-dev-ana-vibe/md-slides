@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppServices } from './app/AppServicesContext'
+import { AskAiModal } from './components/AskAiModal'
 import { Toolbar } from './components/Toolbar'
 import { MarkdownEditorPane, type MarkdownEditorComponent } from './components/MarkdownEditorPane'
 import { PreviewPane } from './components/PreviewPane'
@@ -10,6 +11,13 @@ import { PresentationOverlay } from './components/PresentationOverlay'
 import type { ExportFormat, RenderResult } from './domain/types'
 import { buildStandaloneHtml } from './infrastructure/export/buildStandaloneHtml'
 import { asDiagnosticsMessage, createDiagnosticsChannelId } from './infrastructure/export/diagnostics'
+import { getBuiltInThemeNames, mergeThemeNames } from './infrastructure/marp/themeNames'
+import {
+  buildAskAiFullPrompt,
+  buildChatGptPromptUrl,
+  type SizePreset,
+  type TargetSlideVibe
+} from './infrastructure/prompt/buildAskAiPrompt'
 import { createPresentationChannelId } from './infrastructure/presentation/messages'
 import { useI18n } from './i18n/I18nContext'
 
@@ -19,6 +27,13 @@ const EMPTY_RENDER_RESULT: RenderResult = {
 }
 
 export const RENDER_DEBOUNCE_MS = 150
+export const CHAT_GPT_PROMPT_BASE_URL = 'https://chatgpt.com/?prompt='
+
+interface ClipboardWriter {
+  writeText(text: string): Promise<void>
+}
+
+type OpenExternalUrl = (url: string) => Window | null
 
 function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) {
@@ -28,16 +43,51 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+function writeTextToClipboard(text: string): Promise<void> {
+  const clipboard = (navigator as unknown as { clipboard?: Clipboard }).clipboard
+
+  if (!clipboard) {
+    throw new Error('Clipboard API unavailable.')
+  }
+
+  return clipboard.writeText(text)
+}
+
+const DEFAULT_CLIPBOARD_WRITER: ClipboardWriter = {
+  writeText: writeTextToClipboard
+}
+
+const DEFAULT_OPEN_EXTERNAL_URL: OpenExternalUrl = (url) => window.open(url, '_blank', 'noopener,noreferrer')
+
 interface AppProps {
   editorComponent?: MarkdownEditorComponent
   renderDebounceMs?: number
+  getBuiltInThemeNamesFn?: () => readonly string[]
+  customThemeNames?: readonly string[]
+  clipboardWriter?: ClipboardWriter
+  openExternalUrl?: OpenExternalUrl
+  chatGptBaseUrl?: string
 }
 
-export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNCE_MS }: AppProps) {
+export default function App({
+  editorComponent,
+  renderDebounceMs = RENDER_DEBOUNCE_MS,
+  getBuiltInThemeNamesFn = getBuiltInThemeNames,
+  customThemeNames = [],
+  clipboardWriter = DEFAULT_CLIPBOARD_WRITER,
+  openExternalUrl = DEFAULT_OPEN_EXTERNAL_URL,
+  chatGptBaseUrl = CHAT_GPT_PROMPT_BASE_URL
+}: AppProps) {
   const services = useAppServices()
   const { messages } = useI18n()
   const [markdown, setMarkdown] = useState('')
   const [busyAction, setBusyAction] = useState<ExportFormat | 'open' | null>(null)
+  const [isAskAiOpen, setIsAskAiOpen] = useState(false)
+  const [askAiBrief, setAskAiBrief] = useState('')
+  const [askAiThemeName, setAskAiThemeName] = useState('default')
+  const [askAiIncludePresenterNotes, setAskAiIncludePresenterNotes] = useState(false)
+  const [askAiTargetSlideCount, setAskAiTargetSlideCount] = useState<TargetSlideVibe>('medium')
+  const [askAiSizePreset, setAskAiSizePreset] = useState<SizePreset>('')
   const [renderResult, setRenderResult] = useState<RenderResult>(EMPTY_RENDER_RESULT)
   const [renderError, setRenderError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -169,6 +219,14 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     () => Array.from(new Set([...passivePreviewDiagnosticErrors, ...activePreviewDiagnosticErrors])),
     [activePreviewDiagnosticErrors, passivePreviewDiagnosticErrors]
   )
+  const availableThemeNames = useMemo(
+    () => mergeThemeNames(getBuiltInThemeNamesFn(), customThemeNames),
+    [customThemeNames, getBuiltInThemeNamesFn]
+  )
+  const defaultAskAiThemeName = useMemo(
+    () => availableThemeNames.find((themeName) => themeName.toLowerCase() === 'default') ?? availableThemeNames[0],
+    [availableThemeNames]
+  )
 
   const slideCount = renderResult.html.length
   const hasMarkdown = markdown.trim().length > 0
@@ -265,6 +323,59 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
     setIsPresentationOpen(false)
   }, [])
 
+  const handleOpenAskAi = useCallback(() => {
+    setActionError(null)
+    setAskAiBrief('')
+    setAskAiThemeName(defaultAskAiThemeName)
+    setAskAiIncludePresenterNotes(false)
+    setAskAiTargetSlideCount('medium')
+    setAskAiSizePreset('')
+    setIsAskAiOpen(true)
+  }, [defaultAskAiThemeName])
+
+  const handleCloseAskAi = useCallback(() => {
+    setIsAskAiOpen(false)
+  }, [])
+
+  const createAskAiPrompt = useCallback(
+    () =>
+      buildAskAiFullPrompt(
+        {
+          themeName: askAiThemeName,
+          includePresenterNotes: askAiIncludePresenterNotes,
+          targetSlideCount: askAiTargetSlideCount,
+          sizePreset: askAiSizePreset
+        },
+        askAiBrief
+      ),
+    [askAiBrief, askAiIncludePresenterNotes, askAiSizePreset, askAiTargetSlideCount, askAiThemeName]
+  )
+
+  const handleCopyAskAiPrompt = useCallback(async () => {
+    setActionError(null)
+
+    try {
+      await clipboardWriter.writeText(createAskAiPrompt())
+    } catch (error) {
+      setActionError(messages.failedToCopyAskAiPrompt(toErrorMessage(error, messages.askAiClipboardUnavailable)))
+    }
+  }, [clipboardWriter, createAskAiPrompt, messages])
+
+  const handleOpenChatGpt = useCallback(() => {
+    setActionError(null)
+
+    try {
+      const url = buildChatGptPromptUrl(chatGptBaseUrl, createAskAiPrompt())
+      const openedWindow = openExternalUrl(url)
+
+      if (openedWindow === null) {
+        throw new Error(messages.askAiPopupBlocked)
+      }
+    } catch (error) {
+      setActionError(messages.failedToOpenChatGpt(toErrorMessage(error, messages.askAiPopupBlocked)))
+    }
+  }, [chatGptBaseUrl, createAskAiPrompt, messages, openExternalUrl])
+
   useEffect(() => {
     if (!isPresentationOpen) {
       return
@@ -274,6 +385,14 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
       setIsPresentationOpen(false)
     }
   }, [canPresent, isPresentationOpen])
+
+  useEffect(() => {
+    if (availableThemeNames.some((themeName) => themeName === askAiThemeName)) {
+      return
+    }
+
+    setAskAiThemeName(defaultAskAiThemeName)
+  }, [askAiThemeName, availableThemeNames, defaultAskAiThemeName])
 
   const previewDocumentHtml = useMemo(
     () =>
@@ -300,6 +419,7 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
           canPresent={canPresent}
           busyAction={busyAction}
           pdfDisabledReason={pdfDisabledReason}
+          onOpenAskAi={handleOpenAskAi}
           onOpenMarkdown={() => {
             void handleOpenMarkdown()
           }}
@@ -335,6 +455,27 @@ export default function App({ editorComponent, renderDebounceMs = RENDER_DEBOUNC
           css={renderResult.css}
           channelId={presentationChannelId}
           onExit={handleExitPresentation}
+        />
+      )}
+
+      {isAskAiOpen && (
+        <AskAiModal
+          themeNames={availableThemeNames}
+          userBrief={askAiBrief}
+          themeName={askAiThemeName}
+          includePresenterNotes={askAiIncludePresenterNotes}
+          targetSlideCount={askAiTargetSlideCount}
+          sizePreset={askAiSizePreset}
+          onUserBriefChange={setAskAiBrief}
+          onThemeNameChange={setAskAiThemeName}
+          onIncludePresenterNotesChange={setAskAiIncludePresenterNotes}
+          onTargetSlideCountChange={setAskAiTargetSlideCount}
+          onSizePresetChange={setAskAiSizePreset}
+          onClose={handleCloseAskAi}
+          onCopyPrompt={() => {
+            void handleCopyAskAiPrompt()
+          }}
+          onOpenChatGpt={handleOpenChatGpt}
         />
       )}
     </div>
