@@ -64,7 +64,10 @@ export function DropZone({ children, onMarkdownFileDrop }: DropZoneProps) {
   }
 
   const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
-    if (!pickFirstMarkdownFile(event.dataTransfer)) {
+    const hasMarkdownFile = pickFirstMarkdownFile(event.dataTransfer) !== null
+    const hasNoFiles = event.dataTransfer.files.length === 0
+
+    if (!hasMarkdownFile && !hasNoFiles) {
       return
     }
 
